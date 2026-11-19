@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1B2A41">
+<meta name="robots" content="noindex, nofollow">
+<title>Tarsier Research</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--navy:#1B2A41;--navy2:#2B3F5C;--gold:#C9962E;--ink:#1F2933;--muted:#6B7785;--line:#D9DEE5;--bg:#EEF1F5;
+--card:#fff;--soft:#F4F6F8;--ok:#1E7B34;--bad:#B3261E;--blue:#1437C8;
+--gA:#1E7B34;--gB:#5FA463;--gC:#D9A320;--gD:#E07B39;--gF:#B3261E;--gN:#9AA5B4}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 "Segoe UI",Roboto,system-ui,-apple-system,sans-serif}
+body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;display:flex;align-items:center;gap:10px;
+padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top))}
+header img{width:32px;height:32px;border-radius:7px}
+header .brand{font:700 21px Georgia,serif;letter-spacing:.2px}
+header .sub{font:700 10px "Segoe UI",sans-serif;color:#93A1B8;letter-spacing:1.5px;margin-top:6px}
+header .back{background:none;border:0;color:#fff;font-size:24px;padding:0 6px 0 0;cursor:pointer;display:none}
+header.has-back .back{display:block}
+header .grow{flex:1}
+header .tag{font:10px Consolas,monospace;color:var(--gold);text-align:right;line-height:1.3}
+main{padding:12px;max-width:640px;margin:0 auto}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;z-index:5;
+padding-bottom:env(safe-area-inset-bottom)}
+nav a{flex:1;text-align:center;padding:8px 0 9px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:600}
+nav a svg{display:block;margin:0 auto 2px;width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+nav a.on{color:var(--navy)}
+nav a.on svg{stroke:var(--navy)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
+.h{font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--navy);text-transform:uppercase;margin:0 0 8px}
+.muted{color:var(--muted)} .small{font-size:12px} .tiny{font-size:11px}
+.badge{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;border-radius:8px}
+.chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;margin-right:4px;vertical-align:2px}
+.chip.prov{background:#FFF1D6;color:#8A5A00}.chip.pre{background:#DCE8FB;color:var(--blue)}.chip.nc{background:#F9D7D3;color:var(--bad)}
+.summary{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 10px}
+.sorts button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 10px;font:600 12px inherit;color:var(--ink);margin-left:4px}
+.sorts button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.co{display:flex;gap:12px;align-items:center;cursor:pointer}
+.co .badge{width:48px;height:48px;font-size:20px;flex:none}
+.co .mid{flex:1;min-width:0}
+.co .t{font-weight:700;font-size:16px}
+.co .n{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.co .right{text-align:right;flex:none}
+.co .fv{font-weight:700}
+.up{color:var(--ok)}.down{color:var(--bad)}
+.hero{display:flex;gap:14px;align-items:center}
+.hero .badge{width:76px;height:76px;font-size:34px;border-radius:12px;flex:none}
+.hero .t{font:700 22px Georgia,serif}
+.facts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.facts span{background:var(--soft);border-radius:6px;padding:3px 8px;font-size:12px}
+.stack{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--soft);margin:6px 0 8px}
+.stack i{display:block;height:100%;border-right:2px solid #fff}
+.rows .r{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
+.blk{border-top:1px solid var(--line);padding:10px 0 8px;cursor:pointer}
+.blk:first-of-type{border-top:0;padding-top:2px}
+.blk .top{display:flex;align-items:center;gap:10px}
+.blk .name{font-weight:700;font-size:12px;letter-spacing:.5px;width:104px;color:var(--muted)}
+.blk .bar{flex:1;height:8px;background:var(--soft);border-radius:4px;overflow:hidden}
+.blk .bar i{display:block;height:100%;border-radius:4px}
+.blk .val{width:40px;text-align:right;font-weight:700;font-size:16px}
+.blk .w{font-size:11px;color:var(--muted);width:34px;text-align:right}
+.blk .more{display:none;margin:8px 0 2px;font-size:13px}
+.blk.open .more{display:block}
+.blk .caret{color:var(--muted);font-size:12px;width:10px;display:inline-block;transition:transform .15s}
+.blk.open .caret{transform:rotate(90deg)}
+.item{background:var(--soft);border-radius:8px;padding:8px 10px;margin-top:6px}
+.item .l{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.item .why{color:var(--muted);font-size:12px;margin-top:2px}
+.item .sc{color:var(--muted);font-size:11px;margin-top:3px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{background:var(--soft);border-radius:8px;padding:9px 10px}
+.tile .k{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px}
+.tile .v{font-size:19px;font-weight:700;margin:2px 0}
+.tile .s{font-size:11px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:10px;letter-spacing:.5px;color:var(--muted);text-align:right;font-weight:700;padding:4px 2px}
+th:first-child,td:first-child{text-align:left}
+td{text-align:right;padding:5px 2px;border-top:1px solid var(--line)}
+tr.w td{font-weight:700}
+.vals{display:flex;gap:8px;margin-bottom:10px}
+.vals>div{flex:1;background:var(--soft);border-radius:8px;padding:9px 10px}
+.vals .k{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px}
+.vals .v{font-size:20px;font-weight:700}
+.donut{display:flex;gap:14px;align-items:center}
+.donut svg{flex:none}
+.legend{flex:1;font-size:13px}
+.legend div{display:flex;align-items:center;gap:7px;padding:2px 0}
+.legend b{margin-left:auto;font-weight:700}
+.legend i{width:11px;height:11px;border-radius:3px;flex:none}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.empty{text-align:center;color:var(--muted);padding:40px 10px}
+.grades{display:flex;flex-wrap:wrap;gap:5px}
+.grades span{border-radius:6px;color:#fff;font-weight:700;font-size:12px;padding:3px 7px}
+p{margin:6px 0}
+.hist{display:flex;align-items:flex-end;gap:5px;height:96px;margin-top:6px}
+.hist div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.hist i{width:100%;border-radius:4px 4px 0 0}
+.hist b{font-size:11px;margin-bottom:2px}
+.hist div{cursor:pointer;border-radius:6px;padding-top:2px}
+.hist div.sel{background:var(--soft);outline:1.5px solid var(--navy)}
+.nums td.ch{font-weight:700}
+.qt{font:700 15px Georgia,serif;margin:12px 0 4px}
+.hist span{font-size:9px;color:var(--muted);margin-top:3px;white-space:nowrap}
+</style>
+</head>
+<body>
+<header id="hd">
+  <button class="back" onclick="history.back()" aria-label="Back">‹</button>
+  <img src="logo-64.png" alt="">
+  <div class="grow"><span class="brand">Tarsier</span> <span class="sub">RESEARCH</span></div>
+  <div class="tag">SEE PAST<br>THE HEADLINES</div>
+</header>
+<main id="app"><div class="empty">Loading…</div></main>
+<nav>
+  <a href="#/" id="n-w"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Watchlist</a>
+  <a href="#/portfolio" id="n-p"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 5"/></svg>Portfolio</a>
+  <a href="#/method" id="n-m"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Method</a>
+</nav>
+<script>
+"use strict";
+let D = null, sortBy = "grade", selQ = null, selT = null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const gcol = g => g ? `var(--g${g[0]})` : "var(--gN)";
+const scol = s => s == null ? "var(--line)" : s >= 80 ? "var(--ok)" : s >= 60 ? "var(--gold)" : "var(--bad)";
+const BLOCK = {growth:"Growth", profitability:"Profitability", cash:"Cash", balance:"Balance", execution:"Execution"};
+const BCOL = {growth:"#2a78d6", profitability:"#1baf7a", cash:"#eda100", balance:"#6250d6", execution:"#eb6834"};
+const SLOTS = ["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#6250d6"];
+const money = v => v == null ? "—" : (Math.abs(v) >= 1000 ? `$${(v/1000).toFixed(1)}B` : `$${Math.round(v).toLocaleString("en-US")}M`).replace("$-", "−$");
+const usd = v => v == null ? "—" : "$" + v.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const pct = (v, s) => v == null ? "—" : (s && v > 0 ? "+" : "") + v.toFixed(1) + "%";
+
+async function load() {
+  if (window.TARSIER_DATA) { D = window.TARSIER_DATA; route(); return; }
+  try {
+    const r = await fetch("data.json?" + Date.now(), {cache: "no-store"});
+    if (!r.ok) throw new Error(r.status);
+    D = await r.json();
+  } catch (e) {
+    D = window.TARSIER_DATA || null;
+  }
+  route();
+}
+
+function chips(q) {
+  return (q.preliminary ? '<span class="chip pre">PRELIMINARY</span>' : "") +
+         (q.unsupported ? '<span class="chip nc">NOT COMPARABLE</span>' : "") +
+         (q.provisional && !q.preliminary ? '<span class="chip prov">PROVISIONAL</span>' : "");
+}
+
+function spark(hist) {
+  const h = hist.slice(-8), w = 64, ht = 22, bw = w / 8 - 2;
+  return `<svg width="${w}" height="${ht}" aria-hidden="true">` + h.map((x, i) => {
+    const v = Math.max(4, (x.score || 0) / 100 * ht);
+    return `<rect x="${i * (bw + 2)}" y="${ht - v}" width="${bw}" height="${v}" rx="1.5" fill="${gcol(x.grade)}" opacity="${i == h.length - 1 ? 1 : .55}"/>`;
+  }).join("") + "</svg>";
+}
+
+function watchlist() {
+  if (!D || !D.companies.length) return `<div class="empty">No companies yet.<br>Grade one in Tarsier on your PC, then press Publish to phone.</div>`;
+  const cs = [...D.companies];
+  const up = c => c.valuation && c.valuation.upside;
+  if (sortBy == "upside") cs.sort((a, b) => (up(b) ?? -1e9) - (up(a) ?? -1e9));
+  else if (sortBy == "az") cs.sort((a, b) => a.ticker.localeCompare(b.ticker));
+  else cs.sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0));
+  return `<div class="summary"><span class="small muted">${D.companies.length} companies · ${esc(D.generated)}</span>
+    <span class="sorts">${[["grade","Grade"],["upside","Upside"],["az","A–Z"]].map(([k, l]) =>
+      `<button class="${sortBy == k ? "on" : ""}" onclick="sortBy='${k}';route()">${l}</button>`).join("")}</span></div>` +
+    cs.map(c => {
+      const q = c.latest, v = c.valuation;
+      const right = v && v.fair_value != null ? `<div class="fv">${usd(v.fair_value)}</div>
+         <div class="tiny ${v.upside == null ? "muted" : v.upside >= 0 ? "up" : "down"}">${v.upside == null ? "fair value" : pct(v.upside, 1) + " vs price"}</div>` : "";
+      return `<div class="card co" onclick="location.hash='#/c/${c.ticker}'">
+        <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
+        <div class="mid"><div class="t">${esc(c.ticker)} ${chips(q)}</div><div class="n">${esc(c.name)}</div>
+          <div class="tiny muted">${esc(q.label)} · ${q.score ?? "n/a"} / 100 ${spark(c.history)}</div></div>
+        <div class="right">${right}</div></div>`;
+    }).join("") + (D.skipped && D.skipped.length ? `<p class="note">Not shown: ${D.skipped.map(s => esc(s[0])).join(", ")} (no quarterly SEC data).</p>` : "");
+}
+
+function blockRow(b) {
+  const d = b.detail, it = d.items.map(x => `<div class="item"><div class="l"><span>${esc(x.label)}</span>
+      <span>${esc(x.value)} → ${x.points} pts</span></div>
+      ${x.share != null ? `<div class="why">counts ${x.share}% of this block</div>` : ""}
+      ${x.why ? `<div class="why">${esc(x.why)}</div>` : ""}${x.scale ? `<div class="sc">scale: ${esc(x.scale)}</div>` : ""}</div>`).join("");
+  const extra = (b.key == "execution" && b.score == null) ? `<div class="item"><div class="why">No inputs yet (guidance and consensus). Until they are entered, this block's weight is shared by the other four.</div></div>` :
+    (d.waiting.length ? `<div class="item"><div class="why">Not available this quarter: ${esc(d.waiting.join(", "))}</div></div>` : "");
+  return `<div class="blk" onclick="this.classList.toggle('open')"><div class="top">
+      <span class="caret">▸</span><span class="name">${BLOCK[b.key].toUpperCase()}</span>
+      <span class="bar"><i style="width:${b.score ?? 0}%;background:${scol(b.score)}"></i></span>
+      <span class="val">${b.score ?? "n/a"}</span><span class="w">${b.weight}%</span></div>
+      <div class="more">${it}${extra}</div></div>`;
+}
+
+function pickQ(i) { selQ = i; const y = window.scrollY; route(); window.scrollTo(0, y); }
+
+function quarters(c) {
+  const hs = c.history.slice(-8), off = c.history.length - hs.length;
+  const i = selQ == null ? c.history.length - 1 : selQ, h = c.history[i], n = h.numbers;
+  const bars = hs.map((x, k) => `<div class="${off + k == i ? "sel" : ""}" onclick="pickQ(${off + k})"><b>${esc(x.grade || "—")}</b>
+      <i style="height:${Math.max(4, (x.score || 0) * .7)}px;background:${gcol(x.grade)}"></i>
+      <span>${esc(x.label.replace("FY", "").replace(" ", "\u00a0"))}</span></div>`).join("");
+  let t = `<p class="note">No figures for this quarter.</p>`;
+  if (n) {
+    const a = n.cur, p = n.prior || {};
+    const pp = (x, y) => x == null || y == null ? "" : ((x - y) >= 0 ? "+" : "−") + Math.abs(x - y).toFixed(1) + "pp";
+    const cls = (x, y) => x == null || y == null ? "" : x >= y ? "up" : "down";
+    const row = (l, x, y, f, ch, cc) => `<tr><td>${l}</td><td>${f(x)}</td><td class="muted">${f(y)}</td><td class="ch ${cc}">${ch}</td></tr>`;
+    const P = v => v == null ? "—" : v.toFixed(1) + "%";
+    const E = v => v == null ? "—" : (v < 0 ? "−$" : "$") + Math.abs(v).toFixed(2);
+    const epsCh = a.eps == null || p.eps == null ? "" : p.eps > 0 && a.eps > 0 ? pct((a.eps / p.eps - 1) * 100, 1) : (a.eps >= p.eps ? "better" : "worse");
+    t = `<table class="nums"><tr><th></th><th>This quarter</th><th>Year ago</th><th>Change</th></tr>
+      ${row("Revenue", a.revenue, p.revenue, money, pct(a.revenue_yoy, 1), a.revenue_yoy == null ? "" : a.revenue_yoy >= 0 ? "up" : "down")}
+      ${row("Gross margin", a.gross, p.gross, P, pp(a.gross, p.gross), cls(a.gross, p.gross))}
+      ${row("Operating margin" + (a.oi_estimated ? "*" : ""), a.operating, p.operating, P, pp(a.operating, p.operating), cls(a.operating, p.operating))}
+      ${row("Net margin", a.net, p.net, P, pp(a.net, p.net), cls(a.net, p.net))}
+      ${row("EPS (GAAP)" + (a.eps_approx ? "*" : ""), a.eps, p.eps, E, epsCh, cls(a.eps, p.eps))}
+      ${row("FCF margin", a.fcf, p.fcf, P, pp(a.fcf, p.fcf), cls(a.fcf, p.fcf))}</table>
+      ${a.oi_estimated || a.eps_approx ? `<p class="note">* estimated: the company did not report this line directly.</p>` : ""}`;
+  }
+  return `<div class="card"><div class="h">Quarter by quarter <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· tap one</span></div>
+    <div class="hist">${bars}</div>
+    <div class="qt">${esc(h.label)} · ${esc(h.grade || "—")} <span class="small muted" style="font-family:inherit;font-weight:400">${h.score ?? ""} / 100</span>
+      ${h.preliminary ? '<span class="chip pre">PRELIMINARY</span>' : ""}</div>${t}</div>`;
+}
+
+function company(t) {
+  const c = D && D.companies.find(x => x.ticker == t);
+  if (!c) return `<div class="empty">Not found.</div>`;
+  if (selT != t) { selT = t; selQ = null; }
+  const q = c.latest, f = q.fcf, v = c.valuation, u = q.uses || {};
+  const facts = (q.headline || "").split("·").map(s => s.trim()).filter(Boolean);
+  const total = q.grade_rows.reduce((a, r) => a + r.points, 0) || 1;
+  let html = `<div class="card"><div class="hero">
+      <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
+      <div><div class="t">${esc(c.ticker)}</div><div class="small muted">${esc(c.name)}</div>
+      <div class="small">${esc(q.label)} · <b>${q.score ?? "n/a"}</b> / 100 ${chips(q)}</div></div></div>
+      <div class="facts">${facts.map(s => `<span>${esc(s)}</span>`).join("")}</div></div>`;
+
+  html += quarters(c);
+
+  html += `<div class="card"><div class="h">How the grade adds up · ${esc(q.label)}</div>
+    <div class="stack">${q.grade_rows.map(r => `<i title="${r.block}" style="width:${r.points / total * 100}%;background:${BCOL[r.block]}"></i>`).join("")}</div>
+    <div class="rows">${q.grade_rows.map(r => `<div class="r"><span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${BCOL[r.block]}"></i>
+      ${BLOCK[r.block]} ${r.score} × ${r.weight}%</span><b>${r.points.toFixed(1)}</b></div>`).join("")}
+      <div class="r" style="border-top:1px solid var(--line);margin-top:3px;padding-top:5px"><span>Score</span><b>${q.score}</b></div></div>
+    ${q.blocks.some(b => b.score == null) ? `<p class="note">Blocks with no data share their weight with the others.</p>` : ""}
+    ${q.house_rules ? `<p class="note">House rule: ${esc(q.house_rules)}</p>` : ""}</div>`;
+
+  html += `<div class="card"><div class="h">The five blocks · ${esc(q.label)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· tap one to see why</span></div>
+    ${q.blocks.map(blockRow).join("")}</div>`;
+
+  html += `<div class="card"><div class="h">Free cash flow · last 12 months</div><div class="tiles">
+      <div class="tile"><div class="k">FREE CASH FLOW</div><div class="v">${money(f.ttm)}</div><div class="s">${f.growth_pct == null ? "" : pct(f.growth_pct, 1) + " vs a year ago"}</div></div>
+      <div class="tile"><div class="k">FCF MARGIN</div><div class="v">${pct(f.margin_ttm)}</div><div class="s">${f.margin_pp == null ? "" : (f.margin_pp > 0 ? "+" : "") + f.margin_pp.toFixed(1) + "pp vs a year ago"}</div></div>
+      <div class="tile"><div class="k">AFTER STOCK PAY</div><div class="v">${money(f.after_sbc_ttm)}</div><div class="s">stock pay ${money(f.sbc_ttm)}</div></div>
+      <div class="tile"><div class="k">RETURNED</div><div class="v">${money((u.buybacks || 0) + (u.dividends || 0))}</div><div class="s">buybacks ${money(u.buybacks || 0)} · dividends ${money(u.dividends || 0)}</div></div>
+    </div><p class="note">${esc(f.verdict)}</p></div>`;
+
+  if (v) {
+    const sc = v.scenarios, yrs = v.target_years;
+    html += `<div class="card"><div class="h">Fair value · after a ${v.margin_of_safety}% margin of safety</div>
+      <div class="vals"><div><div class="k">BY MULTIPLE</div><div class="v">${usd(v.fair_value)}</div>
+        <div class="tiny ${v.upside == null ? "muted" : v.upside >= 0 ? "up" : "down"}">${v.upside == null ? "no price saved" : pct(v.upside, 1) + " vs " + usd(v.price)}</div></div>
+        <div><div class="k">BY FREE CASH FLOW</div><div class="v">${usd(v.dcf_value)}</div>
+        <div class="tiny ${v.dcf_upside == null ? "muted" : v.dcf_upside >= 0 ? "up" : "down"}">${v.dcf_upside == null ? "cross-check" : pct(v.dcf_upside, 1) + " vs price"}</div></div></div>
+      <table><tr><th>Price target</th>${yrs.map(y => `<th>${esc(y.replace("FY", "").replace("E", ""))}</th>`).join("")}</tr>
+      ${["bear", "base", "bull"].map(s => `<tr><td>${s[0].toUpperCase() + s.slice(1)} <span class="tiny muted">${v.weights[s]}%</span></td>${sc[s].targets.map(x => `<td>${usd(x)}</td>`).join("")}</tr>`).join("")}
+      <tr class="w"><td>Weighted</td>${v.weighted_targets.map(x => `<td>${usd(x)}</td>`).join("")}</tr></table>
+      ${v.expected_return != null ? `<p class="note">Expected yearly return at today's price: <b>${pct(v.expected_return, 1)}</b>.</p>` : ""}
+      ${v.reconcile && v.reconcile.length ? `<p class="note">Why the two values differ: ${esc(v.reconcile.join(" "))}</p>` : ""}</div>`;
+  }
+
+  const b = c.business;
+  if (b) {
+    const P = {health: "Financial health", margins: "Margins vs peers", share: "Market share", tam: "Market growth", moat: "Moat"};
+    html += `<div class="card"><div class="h">The business ${b.grade ? `· <span style="color:${gcol(b.grade)}">${b.grade}</span>` : ""}</div>
+      ${b.hq ? `<p class="small muted">${esc(b.hq)}${b.industry ? " · " + esc(b.industry) : ""}</p>` : ""}
+      ${Object.entries(P).map(([k, l]) => { const p = b.pillars[k] || {}; return `<div class="blk" style="cursor:default"><div class="top">
+        <span class="name" style="width:128px">${l.toUpperCase()}</span><span class="bar"><i style="width:${p.score ?? 0}%;background:${scol(p.score)}"></i></span>
+        <span class="val">${p.score ?? "—"}</span></div><div class="tiny muted" style="margin-top:3px">${esc(p.note || "")}</div></div>`; }).join("")}
+      ${b.grade ? "" : `<p class="note">${b.filled} of 5 pillars filled: the business grade appears when all five are in.</p>`}</div>`;
+  }
+  html += `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
+  return html;
+}
+
+function donut(items, colour) {
+  const R = 52, C = 2 * Math.PI * R;
+  let off = 0;
+  const arcs = items.map(([n, w]) => {
+    const len = w / 100 * C, s = `<circle r="${R}" cx="64" cy="64" fill="none" stroke="${colour(n)}" stroke-width="22"
+      stroke-dasharray="${Math.max(0, len - 2)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 64 64)"/>`;
+    off += len; return s;
+  }).join("");
+  return `<div class="donut"><svg width="128" height="128" viewBox="0 0 128 128">${arcs}</svg>
+    <div class="legend">${items.map(([n, w]) => `<div><i style="background:${colour(n)}"></i>${esc(n)}<b>${w.toFixed(1)}%</b></div>`).join("")}</div></div>`;
+}
+
+function fold(list, max = 8) {
+  const named = list.filter(([n]) => n != "Not classified");
+  if (named.length < max) return list;
+  const keep = list.slice(0, max - 1), rest = list.slice(max - 1);
+  return [...keep, ["Other", rest.reduce((a, [, w]) => a + w, 0)]];
+}
+
+function portfolio() {
+  const p = D && D.portfolio;
+  if (!p) return `<div class="empty">No portfolio yet.<br>Fill the Portfolio page in Tarsier on your PC.</div>`;
+  const STY = {Growth: "#2a78d6", Value: "#eb6834", Dividend: "#1baf7a", "Blend (index fund)": "#6250d6"};
+  const mk = list => { const order = list.map(([n]) => n).filter(n => n != "Other" && n != "Not classified");
+    return n => n == "Other" ? "#AEB6C1" : n == "Not classified" ? "#D5DAE1" : (STY[n] && list === p.style ? STY[n] : SLOTS[order.indexOf(n) % SLOTS.length]); };
+  return `<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
+    <div class="card"><div class="h">By sector</div>${donut(fold(p.sector), mk(p.sector))}</div>
+    <div class="card"><div class="h">By style</div>${donut(p.style, mk(p.style))}</div>
+    <p class="note" style="text-align:center">Shares of the money invested. Amounts stay on the PC.</p>`;
+}
+
+function method() {
+  const g = D ? D.grades : [];
+  return `<div class="card"><div class="h">What Tarsier does</div>
+    <p>Every quarter a company reports to the SEC. Tarsier reads the filing, compares the quarter with the same quarter a year earlier, and grades it from <b>A+</b> to <b>F</b>.</p>
+    <p class="small muted">See past the headlines: one grade, and the reasons behind it.</p></div>
+  <div class="card"><div class="h">Five blocks</div><table>
+    <tr><th>Block</th><th>Growth co.</th><th>Mature co.</th></tr>
+    <tr><td><b>Growth</b> <span class="tiny muted">revenue vs a year ago</span></td><td>30%</td><td>15%</td></tr>
+    <tr><td><b>Profitability</b> <span class="tiny muted">margins, EPS</span></td><td>20%</td><td>25%</td></tr>
+    <tr><td><b>Cash</b> <span class="tiny muted">free cash flow, stock pay</span></td><td>15%</td><td>30%</td></tr>
+    <tr><td><b>Balance</b> <span class="tiny muted">debt, dilution</span></td><td>10%</td><td>20%</td></tr>
+    <tr><td><b>Execution</b> <span class="tiny muted">vs guidance and consensus</span></td><td>25%</td><td>10%</td></tr></table>
+    <p class="note">A growth company is one whose revenue grows 15% a year or more. A block with no data shares its weight with the others.</p></div>
+  <div class="card"><div class="h">From score to grade</div><div class="grades">${g.map(([lo, gr]) => `<span style="background:${gcol(gr)}">${gr} ${lo}+</span>`).join("")}<span style="background:var(--gF)">F</span></div></div>
+  <div class="card"><div class="h">Labels</div>
+    <p><span class="chip prov">PROVISIONAL</span> fewer than 3 of the 5 Execution inputs: the grade rests on the filing alone.</p>
+    <p><span class="chip pre">PRELIMINARY</span> graded from the earnings press release, before the 10-Q reached the SEC.</p>
+    <p><span class="chip nc">NOT COMPARABLE</span> banks, lenders and insurers: the scorecard does not fit them yet.</p></div>
+  <div class="card"><div class="h">Fair value</div><p class="small">Three scenarios (bear, base, bull) for the next five years give price targets; weighted and brought back to today, after a margin of safety, they give the fair value. A free cash flow valuation at the sector's cost of capital is the cross-check.</p></div>
+  <p class="note" style="text-align:center">Tarsier Research ${D ? "v" + esc(D.version) + " · method " + esc(D.method) : ""}<br>Educational analysis, not investment advice.</p>`;
+}
+
+function route() {
+  const h = location.hash || "#/";
+  const m = h.match(/^#\/c\/([A-Z0-9.\-]+)/i);
+  $("#hd").classList.toggle("has-back", !!m);
+  ["n-w", "n-p", "n-m"].forEach(id => $("#" + id).classList.remove("on"));
+  let html;
+  if (!D) html = `<div class="empty">No data yet.<br>Press Publish to phone in Tarsier on your PC.</div>`;
+  else if (m) { html = company(m[1].toUpperCase()); $("#n-w").classList.add("on"); }
+  else if (h.startsWith("#/portfolio")) { html = portfolio(); $("#n-p").classList.add("on"); }
+  else if (h.startsWith("#/method")) { html = method(); $("#n-m").classList.add("on"); }
+  else { html = watchlist(); $("#n-w").classList.add("on"); }
+  $("#app").innerHTML = html;
+  if (!m) window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", () => { route(); window.scrollTo(0, 0); });
+if ("serviceWorker" in navigator && location.protocol == "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+load();
+</script>
+</body>
+</html>
