@@ -47,6 +47,21 @@ nav a.on svg{stroke:var(--navy)}
 .co .n{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .co .right{text-align:right;flex:none}
 .co .fv{font-weight:700}
+.co{flex-wrap:wrap}
+.co .how{font-size:11px;color:var(--muted);line-height:1.35;margin-top:3px;white-space:nowrap}
+.co .ind{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpis{flex-basis:100%;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:10px;border-top:1px solid var(--line);padding-top:9px}
+.kpis div{text-align:center;min-width:0}
+.kpis .k{font-size:9.5px;font-weight:700;color:var(--muted);letter-spacing:.3px;white-space:nowrap}
+.kpis .v{font-size:14px;font-weight:700;margin-top:1px;white-space:nowrap}
+.kpis .d{font-size:10.5px;white-space:nowrap}
+.search{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:15px inherit;background:#fff;margin-bottom:8px}
+.sectors{display:flex;gap:6px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.sectors::-webkit-scrollbar{display:none}
+.sectors button{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font:600 12px inherit;color:var(--ink)}
+.sectors button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sectors button span{opacity:.6;font-weight:400;margin-left:3px}
+.blk .line{padding:5px 0 5px 10px;border-left:3px solid var(--line);margin:5px 0;font-size:13px}
 .up{color:var(--ok)}.down{color:var(--bad)}
 .hero{display:flex;gap:14px;align-items:center}
 .hero .badge{width:76px;height:76px;font-size:34px;border-radius:12px;flex:none}
@@ -117,13 +132,13 @@ p{margin:6px 0}
 </header>
 <main id="app"><div class="empty">Loading…</div></main>
 <nav>
-  <a href="#/" id="n-w"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Watchlist</a>
+  <a href="#/" id="n-w"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>Research</a>
   <a href="#/portfolio" id="n-p"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 5"/></svg>Portfolio</a>
   <a href="#/method" id="n-m"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Method</a>
 </nav>
 <script>
 "use strict";
-let D = null, sortBy = "grade", selQ = null, selT = null;
+let D = null, sortBy = "grade", selQ = null, selT = null, sector = "All", query = "";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const gcol = g => g ? `var(--g${g[0]})` : "var(--gN)";
@@ -161,29 +176,85 @@ function spark(hist) {
   }).join("") + "</svg>";
 }
 
-function watchlist() {
-  if (!D || !D.companies.length) return `<div class="empty">No companies yet.<br>Grade one in Tarsier on your PC, then press Publish to phone.</div>`;
-  const cs = [...D.companies];
+function kpis(c) {
+  const h = c.history[c.history.length - 1], n = h && h.numbers;
+  if (!n) return "";
+  const a = n.cur, p = n.prior || {};
+  const pp = (x, y) => x == null || y == null ? "" : `<div class="d ${x >= y ? "up" : "down"}">${x - y >= 0 ? "+" : "−"}${Math.abs(x - y).toFixed(1)}pp</div>`;
+  const P = v => v == null ? "—" : v.toFixed(1) + "%";
+  const eps = v => v == null ? "—" : (v < 0 ? "−$" : "$") + Math.abs(v).toFixed(2);
+  const epsCh = a.eps == null || p.eps == null ? "" : p.eps > 0 && a.eps > 0 ?
+    `<div class="d ${a.eps >= p.eps ? "up" : "down"}">${pct((a.eps / p.eps - 1) * 100, 1)}</div>` :
+    `<div class="d ${a.eps >= p.eps ? "up" : "down"}">${a.eps >= p.eps ? "better" : "worse"}</div>`;
+  const cell = (k, v, d) => `<div><div class="k">${k}</div><div class="v">${v}</div>${d || '<div class="d">&nbsp;</div>'}</div>`;
+  return `<div class="kpis">
+    ${cell("REV YoY", pct(a.revenue_yoy, 1), `<div class="d muted">${money(a.revenue)}</div>`)}
+    ${cell("GROSS", P(a.gross), pp(a.gross, p.gross))}
+    ${cell("OPERATING", P(a.operating), pp(a.operating, p.operating))}
+    ${cell("NET", P(a.net), pp(a.net, p.net))}
+    ${cell("EPS GAAP", eps(a.eps), epsCh)}</div>`;
+}
+
+function howShort(v) {
+  const h = v && v.how;
+  if (!h || h.target == null) return "fair value";
+  const yr = esc((h.year || "").replace("E", ""));
+  const t0 = "$" + Math.round(h.target).toLocaleString("en-US");
+  return `${h.multiple != null ? h.multiple.toFixed(1) + "× " + esc(h.basis || "") + " in " : "target "}${yr}<br>${t0} · disc. ${h.discount_rate}%/yr`;
+}
+
+function cardHtml(c) {
+  const q = c.latest, v = c.valuation;
+  const right = v && v.fair_value != null ? `<div class="fv">${usd(v.fair_value)}</div>
+     ${v.upside != null ? `<div class="tiny ${v.upside >= 0 ? "up" : "down"}">${pct(v.upside, 1)} vs price</div>` : ""}
+     <div class="how">${howShort(v)}</div>` : "";
+  return `<div class="card co" onclick="location.hash='#/c/${c.ticker}'">
+    <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
+    <div class="mid"><div class="t">${esc(c.ticker)} ${chips(q)}</div><div class="n">${esc(c.name)}</div>
+      <div class="ind">${esc(c.industry || c.sector || "")}</div>
+      <div class="tiny muted">${esc(q.label)} · ${q.score ?? "n/a"} / 100 ${spark(c.history)}</div></div>
+    <div class="right">${right}</div>${kpis(c)}</div>`;
+}
+
+function listHtml() {
+  const qy = query.trim().toLowerCase();
+  const cs = D.companies.filter(c => (sector == "All" || (c.sector || "Other") == sector) &&
+    (!qy || c.ticker.toLowerCase().includes(qy) || (c.name || "").toLowerCase().includes(qy) || (c.industry || "").toLowerCase().includes(qy)));
   const up = c => c.valuation && c.valuation.upside;
   if (sortBy == "upside") cs.sort((a, b) => (up(b) ?? -1e9) - (up(a) ?? -1e9));
   else if (sortBy == "az") cs.sort((a, b) => a.ticker.localeCompare(b.ticker));
   else cs.sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0));
-  return `<div class="summary"><span class="small muted">${D.companies.length} companies · ${esc(D.generated)}</span>
+  return (cs.length ? cs.map(cardHtml).join("") : `<div class="empty">Nothing matches.</div>`) +
+    (D.skipped && D.skipped.length ? `<p class="note">Not shown: ${D.skipped.map(s => esc(s[0])).join(", ")} (no quarterly SEC data).</p>` : "");
+}
+
+function setSector(s) { sector = s; route(); }
+function setQuery(v) { query = v; $("#list").innerHTML = listHtml(); }
+
+function research() {
+  if (!D || !D.companies.length) return `<div class="empty">No companies yet.<br>Grade one in Tarsier on your PC, then press Publish to phone.</div>`;
+  const count = {};
+  D.companies.forEach(c => { const k = c.sector || "Other"; count[k] = (count[k] || 0) + 1; });
+  const secs = Object.keys(count).sort((a, b) => count[b] - count[a] || a.localeCompare(b));
+  if (sector != "All" && !count[sector]) sector = "All";
+  return `<input class="search" type="search" placeholder="Search ticker, company or industry" value="${esc(query)}" oninput="setQuery(this.value)">
+    <div class="sectors">${[["All", D.companies.length], ...secs.map(k => [k, count[k]])].map(([k, n]) =>
+      `<button class="${sector == k ? "on" : ""}" onclick='setSector(${JSON.stringify(k)})'>${esc(k)}<span>${n}</span></button>`).join("")}</div>
+    <div class="summary"><span class="small muted">Updated ${esc(D.generated)}</span>
     <span class="sorts">${[["grade","Grade"],["upside","Upside"],["az","A–Z"]].map(([k, l]) =>
-      `<button class="${sortBy == k ? "on" : ""}" onclick="sortBy='${k}';route()">${l}</button>`).join("")}</span></div>` +
-    cs.map(c => {
-      const q = c.latest, v = c.valuation;
-      const right = v && v.fair_value != null ? `<div class="fv">${usd(v.fair_value)}</div>
-         <div class="tiny ${v.upside == null ? "muted" : v.upside >= 0 ? "up" : "down"}">${v.upside == null ? "fair value" : pct(v.upside, 1) + " vs price"}</div>` : "";
-      return `<div class="card co" onclick="location.hash='#/c/${c.ticker}'">
-        <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
-        <div class="mid"><div class="t">${esc(c.ticker)} ${chips(q)}</div><div class="n">${esc(c.name)}</div>
-          <div class="tiny muted">${esc(q.label)} · ${q.score ?? "n/a"} / 100 ${spark(c.history)}</div></div>
-        <div class="right">${right}</div></div>`;
-    }).join("") + (D.skipped && D.skipped.length ? `<p class="note">Not shown: ${D.skipped.map(s => esc(s[0])).join(", ")} (no quarterly SEC data).</p>` : "");
+      `<button class="${sortBy == k ? "on" : ""}" onclick="sortBy='${k}';route()">${l}</button>`).join("")}</span></div>
+    <div id="list">${listHtml()}</div>`;
 }
 
 function blockRow(b) {
+  if (b.lines) {
+    const ls = b.lines.map(l => `<div class="line">${esc(l)}</div>`).join("");
+    return `<div class="blk" onclick="this.classList.toggle('open')"><div class="top">
+      <span class="caret">▸</span><span class="name">${BLOCK[b.key].toUpperCase()}</span>
+      <span class="bar"><i style="width:${b.score ?? 0}%;background:${scol(b.score)}"></i></span>
+      <span class="val">${b.score ?? "n/a"}</span></div>
+      <div class="more">${ls || '<div class="line">No figures this quarter.</div>'}</div></div>`;
+  }
   const d = b.detail, it = d.items.map(x => `<div class="item"><div class="l"><span>${esc(x.label)}</span>
       <span>${esc(x.value)} → ${x.points} pts</span></div>
       ${x.share != null ? `<div class="why">counts ${x.share}% of this block</div>` : ""}
@@ -273,6 +344,7 @@ function company(t) {
       ${["bear", "base", "bull"].map(s => `<tr><td>${s[0].toUpperCase() + s.slice(1)} <span class="tiny muted">${v.weights[s]}%</span></td>${sc[s].targets.map(x => `<td>${usd(x)}</td>`).join("")}</tr>`).join("")}
       <tr class="w"><td>Weighted</td>${v.weighted_targets.map(x => `<td>${usd(x)}</td>`).join("")}</tr></table>
       ${v.expected_return != null ? `<p class="note">Expected yearly return at today's price: <b>${pct(v.expected_return, 1)}</b>.</p>` : ""}
+      ${v.how && v.how.target != null ? `<p class="note"><b>How:</b> the weighted ${esc(v.how.year.replace("E", ""))} target of ${usd(v.how.target)}${v.how.multiple != null ? ` (base case ${v.how.multiple.toFixed(1)}× ${esc(v.how.basis || "")})` : ""}, discounted ${v.how.years_ahead} years at ${v.how.discount_rate}% a year, is worth ${usd(v.how.pv)} today; less the ${v.how.margin_of_safety}% margin of safety: ${usd(v.fair_value)}.</p>` : ""}
       ${v.reconcile && v.reconcile.length ? `<p class="note">Why the two values differ: ${esc(v.reconcile.join(" "))}</p>` : ""}</div>`;
   }
 
@@ -353,7 +425,7 @@ function route() {
   else if (m) { html = company(m[1].toUpperCase()); $("#n-w").classList.add("on"); }
   else if (h.startsWith("#/portfolio")) { html = portfolio(); $("#n-p").classList.add("on"); }
   else if (h.startsWith("#/method")) { html = method(); $("#n-m").classList.add("on"); }
-  else { html = watchlist(); $("#n-w").classList.add("on"); }
+  else { html = research(); $("#n-w").classList.add("on"); }
   $("#app").innerHTML = html;
   if (!m) window.scrollTo(0, 0);
 }
