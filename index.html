@@ -47,6 +47,39 @@ nav a.on svg{stroke:var(--navy)}
 .co .n{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .co .right{text-align:right;flex:none}
 .co .fv{font-weight:700}
+.co{flex-wrap:wrap}
+.co .how{font-size:11px;color:var(--muted);line-height:1.35;margin-top:3px;white-space:nowrap}
+.co .ind{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpis{flex-basis:100%;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:10px;border-top:1px solid var(--line);padding-top:9px}
+.kpis div{text-align:center;min-width:0}
+.kpis .k{font-size:9.5px;font-weight:700;color:var(--muted);letter-spacing:.3px;white-space:nowrap}
+.kpis .v{font-size:14px;font-weight:700;margin-top:1px;white-space:nowrap}
+.kpis .d{font-size:10.5px;white-space:nowrap}
+.search{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:15px inherit;background:#fff;margin-bottom:8px}
+.sectors{display:flex;gap:6px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.sectors::-webkit-scrollbar{display:none}
+.sectors button{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font:600 12px inherit;color:var(--ink)}
+.sectors button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sectors button span{opacity:.6;font-weight:400;margin-left:3px}
+.gr{border-top:1px solid var(--line);cursor:pointer}
+.gr:first-of-type{border-top:0}
+.gr .top{display:flex;align-items:center;gap:9px;padding:9px 0}
+.gr .top i{width:11px;height:11px;border-radius:3px;flex:none}
+.gr .nm{flex:1;font-size:14px}
+.gr .pts{font-size:14px;color:var(--muted)}
+.gr .pts b{color:var(--ink);font-size:16px}
+.gr .caret{width:12px;color:var(--muted);font-size:12px;display:inline-block;transition:transform .15s;text-align:center}
+.gr.open .caret{transform:rotate(90deg)}
+.gr .bubble{display:none;background:var(--soft);border-radius:10px;padding:8px 12px 8px 4px;margin:0 0 10px;font-size:13px;position:relative}
+.gr .bubble:before{content:"";position:absolute;top:-6px;left:22px;border:6px solid transparent;border-top:0;border-bottom-color:var(--soft)}
+.gr.open .bubble{display:block}
+.gr.total{cursor:default;border-top:2px solid var(--line)}
+.gr.total .nm{font-weight:700}
+.bubble ul,.ptr ul{margin:0;padding-left:20px}
+.bubble li,.ptr li{margin:3px 0}
+.ptr{margin-top:12px;font-size:13px}
+.ptr .pt{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--navy);text-transform:uppercase;margin-bottom:4px}
+.blk .line{padding:5px 0 5px 10px;border-left:3px solid var(--line);margin:5px 0;font-size:13px}
 .up{color:var(--ok)}.down{color:var(--bad)}
 .hero{display:flex;gap:14px;align-items:center}
 .hero .badge{width:76px;height:76px;font-size:34px;border-radius:12px;flex:none}
@@ -117,13 +150,13 @@ p{margin:6px 0}
 </header>
 <main id="app"><div class="empty">Loading…</div></main>
 <nav>
-  <a href="#/" id="n-w"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Watchlist</a>
+  <a href="#/" id="n-w"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>Research</a>
   <a href="#/portfolio" id="n-p"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 5"/></svg>Portfolio</a>
   <a href="#/method" id="n-m"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Method</a>
 </nav>
 <script>
 "use strict";
-let D = null, sortBy = "grade", selQ = null, selT = null;
+let D = null, sortBy = "grade", selQ = null, selT = null, sector = "All", query = "";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const gcol = g => g ? `var(--g${g[0]})` : "var(--gN)";
@@ -161,29 +194,85 @@ function spark(hist) {
   }).join("") + "</svg>";
 }
 
-function watchlist() {
-  if (!D || !D.companies.length) return `<div class="empty">No companies yet.<br>Grade one in Tarsier on your PC, then press Publish to phone.</div>`;
-  const cs = [...D.companies];
+function kpis(c) {
+  const h = c.history[c.history.length - 1], n = h && h.numbers;
+  if (!n) return "";
+  const a = n.cur, p = n.prior || {};
+  const pp = (x, y) => x == null || y == null ? "" : `<div class="d ${x >= y ? "up" : "down"}">${x - y >= 0 ? "+" : "−"}${Math.abs(x - y).toFixed(1)}pp</div>`;
+  const P = v => v == null ? "—" : v.toFixed(1) + "%";
+  const eps = v => v == null ? "—" : (v < 0 ? "−$" : "$") + Math.abs(v).toFixed(2);
+  const epsCh = a.eps == null || p.eps == null ? "" : p.eps > 0 && a.eps > 0 ?
+    `<div class="d ${a.eps >= p.eps ? "up" : "down"}">${pct((a.eps / p.eps - 1) * 100, 1)}</div>` :
+    `<div class="d ${a.eps >= p.eps ? "up" : "down"}">${a.eps >= p.eps ? "better" : "worse"}</div>`;
+  const cell = (k, v, d) => `<div><div class="k">${k}</div><div class="v">${v}</div>${d || '<div class="d">&nbsp;</div>'}</div>`;
+  return `<div class="kpis">
+    ${cell("REV YoY", pct(a.revenue_yoy, 1), `<div class="d muted">${money(a.revenue)}</div>`)}
+    ${cell("GROSS", P(a.gross), pp(a.gross, p.gross))}
+    ${cell("OPERATING", P(a.operating), pp(a.operating, p.operating))}
+    ${cell("NET", P(a.net), pp(a.net, p.net))}
+    ${cell("EPS GAAP", eps(a.eps), epsCh)}</div>`;
+}
+
+function howShort(v) {
+  const h = v && v.how;
+  if (!h || h.target == null) return "fair value";
+  const yr = esc((h.year || "").replace("E", ""));
+  const t0 = "$" + Math.round(h.target).toLocaleString("en-US");
+  return `${h.multiple != null ? h.multiple.toFixed(1) + "× " + esc(h.basis || "") + " in " : "target "}${yr}<br>${t0} · disc. ${h.discount_rate}%/yr`;
+}
+
+function cardHtml(c) {
+  const q = c.latest, v = c.valuation;
+  const right = v && v.fair_value != null ? `<div class="fv">${usd(v.fair_value)}</div>
+     ${v.upside != null ? `<div class="tiny ${v.upside >= 0 ? "up" : "down"}">${pct(v.upside, 1)} vs price</div>` : ""}
+     <div class="how">${howShort(v)}</div>` : "";
+  return `<div class="card co" onclick="location.hash='#/c/${c.ticker}'">
+    <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
+    <div class="mid"><div class="t">${esc(c.ticker)} ${chips(q)}</div><div class="n">${esc(c.name)}</div>
+      <div class="ind">${esc(c.industry || c.sector || "")}</div>
+      <div class="tiny muted">${esc(q.label)} · ${q.score ?? "n/a"} / 100 ${spark(c.history)}</div></div>
+    <div class="right">${right}</div>${kpis(c)}</div>`;
+}
+
+function listHtml() {
+  const qy = query.trim().toLowerCase();
+  const cs = D.companies.filter(c => (sector == "All" || (c.sector || "Other") == sector) &&
+    (!qy || c.ticker.toLowerCase().includes(qy) || (c.name || "").toLowerCase().includes(qy) || (c.industry || "").toLowerCase().includes(qy)));
   const up = c => c.valuation && c.valuation.upside;
   if (sortBy == "upside") cs.sort((a, b) => (up(b) ?? -1e9) - (up(a) ?? -1e9));
   else if (sortBy == "az") cs.sort((a, b) => a.ticker.localeCompare(b.ticker));
   else cs.sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0));
-  return `<div class="summary"><span class="small muted">${D.companies.length} companies · ${esc(D.generated)}</span>
+  return (cs.length ? cs.map(cardHtml).join("") : `<div class="empty">Nothing matches.</div>`) +
+    (D.skipped && D.skipped.length ? `<p class="note">Not shown: ${D.skipped.map(s => esc(s[0])).join(", ")} (no quarterly SEC data).</p>` : "");
+}
+
+function setSector(s) { sector = s; route(); }
+function setQuery(v) { query = v; $("#list").innerHTML = listHtml(); }
+
+function research() {
+  if (!D || !D.companies.length) return `<div class="empty">No companies yet.<br>Grade one in Tarsier on your PC, then press Publish to phone.</div>`;
+  const count = {};
+  D.companies.forEach(c => { const k = c.sector || "Other"; count[k] = (count[k] || 0) + 1; });
+  const secs = Object.keys(count).sort((a, b) => count[b] - count[a] || a.localeCompare(b));
+  if (sector != "All" && !count[sector]) sector = "All";
+  return `<input class="search" type="search" placeholder="Search ticker, company or industry" value="${esc(query)}" oninput="setQuery(this.value)">
+    <div class="sectors">${[["All", D.companies.length], ...secs.map(k => [k, count[k]])].map(([k, n]) =>
+      `<button class="${sector == k ? "on" : ""}" onclick='setSector(${JSON.stringify(k)})'>${esc(k)}<span>${n}</span></button>`).join("")}</div>
+    <div class="summary"><span class="small muted">Updated ${esc(D.generated)}</span>
     <span class="sorts">${[["grade","Grade"],["upside","Upside"],["az","A–Z"]].map(([k, l]) =>
-      `<button class="${sortBy == k ? "on" : ""}" onclick="sortBy='${k}';route()">${l}</button>`).join("")}</span></div>` +
-    cs.map(c => {
-      const q = c.latest, v = c.valuation;
-      const right = v && v.fair_value != null ? `<div class="fv">${usd(v.fair_value)}</div>
-         <div class="tiny ${v.upside == null ? "muted" : v.upside >= 0 ? "up" : "down"}">${v.upside == null ? "fair value" : pct(v.upside, 1) + " vs price"}</div>` : "";
-      return `<div class="card co" onclick="location.hash='#/c/${c.ticker}'">
-        <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
-        <div class="mid"><div class="t">${esc(c.ticker)} ${chips(q)}</div><div class="n">${esc(c.name)}</div>
-          <div class="tiny muted">${esc(q.label)} · ${q.score ?? "n/a"} / 100 ${spark(c.history)}</div></div>
-        <div class="right">${right}</div></div>`;
-    }).join("") + (D.skipped && D.skipped.length ? `<p class="note">Not shown: ${D.skipped.map(s => esc(s[0])).join(", ")} (no quarterly SEC data).</p>` : "");
+      `<button class="${sortBy == k ? "on" : ""}" onclick="sortBy='${k}';route()">${l}</button>`).join("")}</span></div>
+    <div id="list">${listHtml()}</div>`;
 }
 
 function blockRow(b) {
+  if (b.lines) {
+    const ls = b.lines.map(l => `<div class="line">${esc(l)}</div>`).join("");
+    return `<div class="blk" onclick="this.classList.toggle('open')"><div class="top">
+      <span class="caret">▸</span><span class="name">${BLOCK[b.key].toUpperCase()}</span>
+      <span class="bar"><i style="width:${b.score ?? 0}%;background:${scol(b.score)}"></i></span>
+      <span class="val">${b.score ?? "n/a"}</span></div>
+      <div class="more">${ls || '<div class="line">No figures this quarter.</div>'}</div></div>`;
+  }
   const d = b.detail, it = d.items.map(x => `<div class="item"><div class="l"><span>${esc(x.label)}</span>
       <span>${esc(x.value)} → ${x.points} pts</span></div>
       ${x.share != null ? `<div class="why">counts ${x.share}% of this block</div>` : ""}
@@ -195,6 +284,30 @@ function blockRow(b) {
       <span class="bar"><i style="width:${b.score ?? 0}%;background:${scol(b.score)}"></i></span>
       <span class="val">${b.score ?? "n/a"}</span><span class="w">${b.weight}%</span></div>
       <div class="more">${it}${extra}</div></div>`;
+}
+
+function pointers(list, title) {
+  return `<div class="ptr">${title ? `<div class="pt">${esc(title)}</div>` : ""}<ul>${list.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+}
+
+function capFmt(w) { return Math.abs(w - Math.round(w)) < 0.05 ? String(Math.round(w)) : w.toFixed(1); }
+
+function gradeCard(q) {
+  const total = q.grade_rows.reduce((a, r) => a + r.points, 0) || 1;
+  const rows = q.grade_rows.map(r => {
+    const b = q.blocks.find(x => x.key == r.block) || {}, ls = b.lines || [];
+    return `<div class="gr" onclick="this.classList.toggle('open')">
+      <div class="top"><i style="background:${BCOL[r.block]}"></i><span class="nm">${BLOCK[r.block]}</span>
+        <span class="pts"><b>${r.points.toFixed(1)}</b> / ${capFmt(r.weight)}</span><span class="caret">▸</span></div>
+      <div class="bubble">${ls.length ? `<ul>${ls.map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : "No figures this quarter."}</div></div>`;
+  }).join("");
+  const missing = q.blocks.filter(b => b.score == null).map(b => BLOCK[b.key]);
+  return `<div class="card"><div class="h">How the grade adds up · ${esc(q.label)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· tap a line</span></div>
+    <div class="stack">${q.grade_rows.map(r => `<i style="width:${r.points / total * 100}%;background:${BCOL[r.block]}"></i>`).join("")}</div>
+    ${rows}
+    <div class="gr total"><div class="top"><span class="nm">Score</span><span class="pts"><b>${q.score}</b> / 100</span><span class="caret"></span></div></div>
+    ${missing.length ? `<p class="note">${esc(missing.join(", "))}: no data yet, so the other blocks count for more.</p>` : ""}
+    ${q.house_rules ? `<p class="note">House rule: ${esc(q.house_rules)}</p>` : ""}</div>`;
 }
 
 function pickQ(i) { selQ = i; const y = window.scrollY; route(); window.scrollTo(0, y); }
@@ -235,7 +348,6 @@ function company(t) {
   if (selT != t) { selT = t; selQ = null; }
   const q = c.latest, f = q.fcf, v = c.valuation, u = q.uses || {};
   const facts = (q.headline || "").split("·").map(s => s.trim()).filter(Boolean);
-  const total = q.grade_rows.reduce((a, r) => a + r.points, 0) || 1;
   let html = `<div class="card"><div class="hero">
       <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
       <div><div class="t">${esc(c.ticker)}</div><div class="small muted">${esc(c.name)}</div>
@@ -244,23 +356,14 @@ function company(t) {
 
   html += quarters(c);
 
-  html += `<div class="card"><div class="h">How the grade adds up · ${esc(q.label)}</div>
-    <div class="stack">${q.grade_rows.map(r => `<i title="${r.block}" style="width:${r.points / total * 100}%;background:${BCOL[r.block]}"></i>`).join("")}</div>
-    <div class="rows">${q.grade_rows.map(r => `<div class="r"><span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${BCOL[r.block]}"></i>
-      ${BLOCK[r.block]} ${r.score} × ${r.weight}%</span><b>${r.points.toFixed(1)}</b></div>`).join("")}
-      <div class="r" style="border-top:1px solid var(--line);margin-top:3px;padding-top:5px"><span>Score</span><b>${q.score}</b></div></div>
-    ${q.blocks.some(b => b.score == null) ? `<p class="note">Blocks with no data share their weight with the others.</p>` : ""}
-    ${q.house_rules ? `<p class="note">House rule: ${esc(q.house_rules)}</p>` : ""}</div>`;
-
-  html += `<div class="card"><div class="h">The five blocks · ${esc(q.label)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· tap one to see why</span></div>
-    ${q.blocks.map(blockRow).join("")}</div>`;
+  html += gradeCard(q);
 
   html += `<div class="card"><div class="h">Free cash flow · last 12 months</div><div class="tiles">
       <div class="tile"><div class="k">FREE CASH FLOW</div><div class="v">${money(f.ttm)}</div><div class="s">${f.growth_pct == null ? "" : pct(f.growth_pct, 1) + " vs a year ago"}</div></div>
       <div class="tile"><div class="k">FCF MARGIN</div><div class="v">${pct(f.margin_ttm)}</div><div class="s">${f.margin_pp == null ? "" : (f.margin_pp > 0 ? "+" : "") + f.margin_pp.toFixed(1) + "pp vs a year ago"}</div></div>
       <div class="tile"><div class="k">AFTER STOCK PAY</div><div class="v">${money(f.after_sbc_ttm)}</div><div class="s">stock pay ${money(f.sbc_ttm)}</div></div>
       <div class="tile"><div class="k">RETURNED</div><div class="v">${money((u.buybacks || 0) + (u.dividends || 0))}</div><div class="s">buybacks ${money(u.buybacks || 0)} · dividends ${money(u.dividends || 0)}</div></div>
-    </div><p class="note">${esc(f.verdict)}</p></div>`;
+    </div>${q.cash_points ? pointers(q.cash_points, "Where the cash went") : `<p class="note">${esc(f.verdict)}</p>`}</div>`;
 
   if (v) {
     const sc = v.scenarios, yrs = v.target_years;
@@ -273,7 +376,9 @@ function company(t) {
       ${["bear", "base", "bull"].map(s => `<tr><td>${s[0].toUpperCase() + s.slice(1)} <span class="tiny muted">${v.weights[s]}%</span></td>${sc[s].targets.map(x => `<td>${usd(x)}</td>`).join("")}</tr>`).join("")}
       <tr class="w"><td>Weighted</td>${v.weighted_targets.map(x => `<td>${usd(x)}</td>`).join("")}</tr></table>
       ${v.expected_return != null ? `<p class="note">Expected yearly return at today's price: <b>${pct(v.expected_return, 1)}</b>.</p>` : ""}
-      ${v.reconcile && v.reconcile.length ? `<p class="note">Why the two values differ: ${esc(v.reconcile.join(" "))}</p>` : ""}</div>`;
+      ${v.how_points && v.how_points.length ? pointers(v.how_points, "From target to fair value") : ""}
+      ${v.why_points && v.why_points.length ? pointers(v.why_points, "Why the two values differ") :
+        v.reconcile && v.reconcile.length ? `<p class="note">Why the two values differ: ${esc(v.reconcile.join(" "))}</p>` : ""}</div>`;
   }
 
   const b = c.business;
@@ -353,7 +458,7 @@ function route() {
   else if (m) { html = company(m[1].toUpperCase()); $("#n-w").classList.add("on"); }
   else if (h.startsWith("#/portfolio")) { html = portfolio(); $("#n-p").classList.add("on"); }
   else if (h.startsWith("#/method")) { html = method(); $("#n-m").classList.add("on"); }
-  else { html = watchlist(); $("#n-w").classList.add("on"); }
+  else { html = research(); $("#n-w").classList.add("on"); }
   $("#app").innerHTML = html;
   if (!m) window.scrollTo(0, 0);
 }
