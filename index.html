@@ -211,7 +211,8 @@ async function load() {
     D = window.TARSIER_DATA || null;
   }
   route();
-  loadRaw().then(() => { if ((location.hash || "").startsWith("#/compare")) route(); });
+  // the phone's own look-ups arrive a moment later: redraw, unless the user is typing
+  loadRaw().then(() => { const a = document.activeElement; if (!(a && a.tagName == "INPUT")) route(); });
 }
 
 // ---------- this phone's own look-ups, shared through the GitHub repository ----------
@@ -235,7 +236,11 @@ async function loadRaw() {
   LS.set("tarsier.raw", RAW);
 }
 const graded = t => D && D.companies.find(c => c.ticker == t && c.compare);
-function rawOnly() { return Object.values(RAW).filter(r => r && r.column && !graded(r.ticker)); }
+// companies graded on the phone (and not yet by the PC) join the PC's list everywhere
+function phoneGraded() { return Object.values(RAW).filter(r => r && r.company && r.company.latest && !graded(r.ticker)).map(r => r.company); }
+function allCos() { return D ? [...D.companies, ...phoneGraded()] : []; }
+const anyGraded = t => allCos().find(c => c.ticker == t && c.compare);
+function rawOnly() { return Object.values(RAW).filter(r => r && r.column && !anyGraded(r.ticker)); }
 
 function b64(str) { return btoa(unescape(encodeURIComponent(str))); }
 async function ghPut(path, text, message) {
@@ -303,33 +308,81 @@ async function cikOf(t) {
   return {cik: "CIK" + String(hit[0]).padStart(10, "0"), name: hit[1]};
 }
 let lookMsg = "";
+// ---------- the Tarsier engine itself (the PC's Python code), run in the phone's browser ----------
+let PY = null, pyLoading = null;
+function loadScript(src) {
+  return new Promise((ok, bad) => { const e = document.createElement("script"); e.src = src; e.onload = ok; e.onerror = () => bad(new Error("could not load " + src)); document.head.appendChild(e); });
+}
+async function engine(say) {
+  if (PY) return PY;
+  if (pyLoading) return pyLoading;
+  pyLoading = (async () => {
+    say("Loading the Tarsier engine (the first time it downloads about 14 MB; then it is kept on the phone)…");
+    const base = new URL("py/", location.href).href;
+    if (typeof loadPyodide == "undefined") await loadScript(base + "pyodide/pyodide.js");
+    const py = await loadPyodide({indexURL: base + "pyodide/"});
+    await py.loadPackage([base + "wheels/et_xmlfile-2.0.0-py3-none-any.whl", base + "wheels/openpyxl-3.1.5-py2.py3-none-any.whl"]);
+    const z = await fetch(base + "engine.zip", {cache: "no-cache"});
+    if (!z.ok) throw new Error("engine.zip did not load");
+    py.unpackArchive(new Uint8Array(await z.arrayBuffer()), "zip", {extractDir: "/tarsier"});
+    py.runPython("import sys; sys.path.insert(0, '/tarsier'); from engine import phone_engine");
+    PY = py;
+    return py;
+  })();
+  try { return await pyLoading; } catch (e) { pyLoading = null; throw e; }
+}
+function engineGrade(py, t, factsText, subsText, px) {
+  py.globals.set("T_", t); py.globals.set("F_", factsText); py.globals.set("S_", subsText || null);
+  py.globals.set("P_", px ? px.price : null); py.globals.set("PT_", px ? px.time : null);
+  return JSON.parse(py.runPython("phone_engine.grade(T_, F_, S_, P_, PT_)"));
+}
+
 async function lookUp(raw) {
   const t = String(raw || "").trim().toUpperCase();
   if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(t)) { lookMsg = "Type a ticker, e.g. MSFT."; route(); return; }
-  lookMsg = `Getting ${t} from the SEC…`; route();
+  const say = m => { lookMsg = m; route(); };
+  say(`Getting ${t} from the SEC…`);
+  let company = null;
   try {
     const {cik, name} = await cikOf(t);
     const r = await fetch(`${RELAY}/sec/facts/${cik}`);
     if (!r.ok) throw new Error(`the SEC has no financial data for ${t}`);
-    const facts = await r.json();
+    const factsText = await r.text();
+    const facts = JSON.parse(factsText);
+    let subsText = null;
+    try { const s2 = await fetch(`${RELAY}/sec/submissions/${cik}`); if (s2.ok) subsText = await s2.text(); } catch (e) {}
     let px = null;
-    try { px = (await livePrice(t)).price; } catch (e) {}
-    const column = TSEC.compute(facts, px);
-    const entry = {ticker: t, name: facts.entityName || name, cik, fetched: new Date().toISOString(), source: "phone", column};
-    RAW[t] = entry; LS.set("tarsier.raw", RAW);
+    try { px = await livePrice(t); } catch (e) {}
+    let column = null, how = "";
+    try {                                      // the full grade, with the PC's own code
+      const py = await engine(say);
+      say(`Grading ${t}…`);
+      company = engineGrade(py, t, factsText, subsText, px);
+      column = company.compare;
+      how = `graded ${company.latest.grade} (${company.latest.label}, ${company.latest.score} / 100) on the phone, quick look.`;
+    } catch (e) {                              // the engine could not run: the raw Compare numbers still can
+      company = null;
+      column = TSEC.compute(facts, px ? px.price : null);
+      how = `raw numbers only (the engine could not run: ${e.message}).`;
+    }
+    const entry = {ticker: t, name: (company && company.name) || facts.entityName || name, cik, fetched: new Date().toISOString(),
+                   source: "phone", column, company};
+    RAW[t] = entry;
+    if (!LS.set("tarsier.raw", RAW)) { const lite = Object.assign({}, RAW); LS.set("tarsier.raw", lite); }
     cmpLoad(); if (!cmpSel.includes(t)) { if (cmpSel.length >= 5) cmpSel.pop(); cmpSel.push(t); } cmpSave();
-    lookMsg = `${t}: latest quarter ${column.end}.`;
+    lookMsg = `${t}: ${how}`;
     try {
       const saved = await ghPut(`raw/${t}.json`, JSON.stringify(entry), `Phone: look up ${t}`);
       if (saved) {
         const idx = (await ghGetJSON("raw/index.json")) || {tickers: {}};
         idx.tickers = idx.tickers || {}; idx.tickers[t] = {fetched: entry.fetched, source: "phone"};
         await ghPut("raw/index.json", JSON.stringify(idx, null, 1), `Phone: list ${t}`);
-        lookMsg += " Synced: the PC grades it at its next Sync with phone.";
-      } else lookMsg += " Kept on this phone (add the GitHub token in Method → Phone settings to sync with the PC).";
-    } catch (e) { lookMsg += " Not synced: " + e.message; }
-  } catch (e) { lookMsg = "Could not get it: " + e.message; }
-  location.hash = "#/compare"; route();
+        lookMsg += " Saved for the PC too.";
+      } else lookMsg += " Kept on this phone (add the GitHub token in Method → Phone settings to share it with the PC).";
+    } catch (e) { lookMsg += " Not shared with the PC: " + e.message; }
+  } catch (e) { lookMsg = "Could not get it: " + e.message; company = null; }
+  if (company) { query = ""; location.hash = "#/c/" + t; } else location.hash = "#/compare";
+  route();
 }
 
 // graded automatically (Compare on the PC, or looked up on the phone) and not analysed yet
@@ -394,14 +447,14 @@ function cardHtml(c) {
 
 function listHtml() {
   const qy = query.trim().toLowerCase();
-  const cs = D.companies.filter(c => (sector == "All" || (c.sector || "Other") == sector) &&
+  const cs = allCos().filter(c => (sector == "All" || (c.sector || "Other") == sector) &&
     (!qy || c.ticker.toLowerCase().includes(qy) || (c.name || "").toLowerCase().includes(qy) || (c.industry || "").toLowerCase().includes(qy)));
   const up = c => c.valuation && c.valuation.upside;
   if (sortBy == "upside") cs.sort((a, b) => (up(b) ?? -1e9) - (up(a) ?? -1e9));
   else if (sortBy == "az") cs.sort((a, b) => a.ticker.localeCompare(b.ticker));
   else cs.sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0));
   const tk = query.trim().toUpperCase();
-  const look = /^[A-Z][A-Z0-9.\-]{0,9}$/.test(tk) ? `<br><button class="cmpbtn" style="width:auto;padding:9px 16px" onclick="lookUp('${tk}')">Get ${esc(tk)} from the SEC →</button>` : "";
+  const look = /^[A-Z][A-Z0-9.\-]{0,9}$/.test(tk) ? `<br><button class="cmpbtn" style="width:auto;padding:9px 16px" onclick="lookUp('${tk}')">Get ${esc(tk)} from the SEC and grade it →</button>` : "";
   return (cs.length ? cs.map(cardHtml).join("") : `<div class="empty">Nothing matches.${look}</div>`) +
     (D.skipped && D.skipped.length ? `<p class="note">Not shown: ${D.skipped.map(s => esc(s[0])).join(", ")} (no quarterly SEC data).</p>` : "");
 }
@@ -410,17 +463,18 @@ function setSector(s) { sector = s; route(); }
 function setQuery(v) { query = v; $("#list").innerHTML = listHtml(); }
 
 function research() {
-  if (!D || !D.companies.length) return `<div class="empty">No companies yet.<br>Grade one in Tarsier on your PC, then press Publish to phone.</div>`;
+  if (!D || !allCos().length) return `<div class="empty">No companies yet.<br>Grade one in Tarsier on your PC, then press Publish to phone.</div>`;
   const count = {};
-  D.companies.forEach(c => { const k = c.sector || "Other"; count[k] = (count[k] || 0) + 1; });
+  allCos().forEach(c => { const k = c.sector || "Other"; count[k] = (count[k] || 0) + 1; });
   const secs = Object.keys(count).sort((a, b) => count[b] - count[a] || a.localeCompare(b));
   if (sector != "All" && !count[sector]) sector = "All";
   return `<input class="search" type="search" placeholder="Search ticker, company or industry" value="${esc(query)}" oninput="setQuery(this.value)">
-    <div class="sectors">${[["All", D.companies.length], ...secs.map(k => [k, count[k]])].map(([k, n]) =>
+    <div class="sectors">${[["All", allCos().length], ...secs.map(k => [k, count[k]])].map(([k, n]) =>
       `<button class="${sector == k ? "on" : ""}" onclick='setSector(${JSON.stringify(k)})'>${esc(k)}<span>${n}</span></button>`).join("")}</div>
     <div class="summary"><span class="small muted">Updated ${esc(D.generated)}</span>
     <span class="sorts">${[["grade","Grade"],["upside","Upside"],["az","A–Z"]].map(([k, l]) =>
       `<button class="${sortBy == k ? "on" : ""}" onclick="sortBy='${k}';route()">${l}</button>`).join("")}</span></div>
+    ${lookMsg ? `<p class="note">${esc(lookMsg)}</p>` : ""}
     <div id="list">${listHtml()}</div>`;
 }
 
@@ -474,16 +528,16 @@ let cmpSel = null;
 function cmpLoad() {
   if (cmpSel) return;
   try { cmpSel = JSON.parse(localStorage.getItem("tarsier.compare") || "null"); } catch (e) { cmpSel = null; }
-  const have = new Set([...D.companies.filter(c => c.compare).map(c => c.ticker), ...rawOnly().map(r => r.ticker)]);
+  const have = new Set([...allCos().filter(c => c.compare).map(c => c.ticker), ...rawOnly().map(r => r.ticker)]);
   cmpSel = (Array.isArray(cmpSel) ? cmpSel : []).filter(t => have.has(t)).slice(0, 5);
-  if (!cmpSel.length) cmpSel = [...D.companies].filter(c => c.compare)
+  if (!cmpSel.length) cmpSel = [...allCos()].filter(c => c.compare)
     .sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0)).slice(0, 3).map(c => c.ticker);
 }
 function cmpSave() { try { localStorage.setItem("tarsier.compare", JSON.stringify(cmpSel)); } catch (e) {} }
 function cmpAdd(t) { cmpLoad(); if (t && !cmpSel.includes(t) && cmpSel.length < 5) cmpSel.push(t); cmpSave(); route(); }
 // one Compare column, graded on the PC or looked up on the phone, at the freshest price there is
 function cmpCol(t) {
-  const g = graded(t), r = RAW[t];
+  const g = anyGraded(t), r = RAW[t];
   const base = g ? Object.assign({}, g.compare, {_name: g.name, _grade: g.latest.grade, _src: "pc"})
              : r && r.column ? Object.assign({}, r.column, {_name: r.name, _grade: null, _src: "phone", _fetched: r.fetched}) : null;
   if (!base) return null;
@@ -499,7 +553,7 @@ function cmpDel(t) { cmpSel = cmpSel.filter(x => x != t); cmpSave(); route(); }
 function cmpSector(s) {
   if (!s) return;
   cmpSel = s == "Looked up on the phone" ? rawOnly().map(r => r.ticker).slice(0, 5)
-    : D.companies.filter(c => c.compare && (c.sector || "Other") == s)
+    : allCos().filter(c => c.compare && (c.sector || "Other") == s)
       .sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0)).slice(0, 5).map(c => c.ticker);
   cmpSave(); route();
 }
@@ -537,7 +591,7 @@ function comparePage() {
   if (!D || !D.compare_rows) return `<div class="empty">Sync again from the PC to use Compare.</div>`;
   cmpLoad();
   const cols = cmpSel.map(t => { const c = cmpCol(t); return c && Object.assign(c, {_t: t}); }).filter(Boolean);
-  const pool = [...D.companies.filter(c => c.compare).map(c => [c.ticker, c.sector || "Other", ""]),
+  const pool = [...allCos().filter(c => c.compare).map(c => [c.ticker, c.sector || "Other", ""]),
                 ...rawOnly().map(r => [r.ticker, "Looked up on the phone", " · phone"])];
   const free = pool.filter(([t]) => !cmpSel.includes(t)).sort((a, b) => a[0].localeCompare(b[0]));
   const count = {};
@@ -551,7 +605,7 @@ function comparePage() {
     </div>
     <form class="look" onsubmit="lookUp(this.t.value);return false">
       <input name="t" placeholder="Any US ticker, e.g. MSFT" autocapitalize="characters" autocomplete="off">
-      <button>Get from SEC</button></form>
+      <button>Get &amp; grade</button></form>
     ${lookMsg ? `<p class="note">${esc(lookMsg)}</p>` : ""}</div>`;
   if (!cols.length) return html + `<div class="empty">Add companies to compare.</div>`;
   const fy = [...new Set(cols.map(c => c.fwd_year).filter(Boolean))];
@@ -574,10 +628,10 @@ function comparePage() {
   const src = [...new Set(cols.map(c => c.price_source).filter(Boolean))];
   const phoneOnly = cols.filter(c => c._src == "phone").map(c => c._t);
   html += `<div class="card"><div class="cmp-wrap"><table class="cmp"><thead><tr><th></th>${cols.map(c => `<th${c._src == "pc" ? ` onclick="location.hash='#/c/${c._t}'"` : ""}>
-      ${c.quick ? `<div class="qtag">QUICK LOOK</div>` : c._src == "phone" ? `<div class="qtag">PHONE ONLY</div>` : ""}<div class="badge" style="background:${gcol(c._grade)}">${esc(c._grade || "—")}</div><div>${esc(c._t)}</div></th>`).join("")}</tr></thead>
+      ${c.quick ? `<div class="qtag">QUICK LOOK</div>` : c._src == "phone" ? `<div class="qtag">RAW ONLY</div>` : ""}<div class="badge" style="background:${gcol(c._grade)}">${esc(c._grade || "—")}</div><div>${esc(c._t)}</div></th>`).join("")}</tr></thead>
       <tbody>${rows}</tbody></table></div>
     <p class="note">${pxBusy ? "Getting live prices… " : ""}${src.length ? "Prices: " + esc(src.join("; ")) + ". " : ""}${esc(pxNote)}
-    ${phoneOnly.length ? `<br>${esc(phoneOnly.join(", "))}: looked up on the phone, so no grade, forward P/E or fair value until the PC grades ${phoneOnly.length > 1 ? "them" : "it"} at the next Sync.` : ""}
+    ${phoneOnly.length ? `<br>${esc(phoneOnly.join(", "))}: raw numbers only (the engine could not run on the phone); the PC grades ${phoneOnly.length > 1 ? "them" : "it"} at the next Sync.` : ""}
     <br>Tap a row name for how it is worked out.</p></div>`;
   return html;
 }
@@ -615,7 +669,7 @@ function quarters(c) {
 }
 
 function company(t) {
-  const c = D && D.companies.find(x => x.ticker == t);
+  const c = allCos().find(x => x.ticker == t);
   if (!c) return `<div class="empty">Not found.</div>`;
   if (selT != t) { selT = t; selQ = null; }
   const q = c.latest, f = q.fcf, v = c.valuation, u = q.uses || {};
@@ -624,7 +678,7 @@ function company(t) {
       <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
       <div><div class="t">${esc(c.ticker)}</div><div class="small muted">${esc(c.name)}</div>
       <div class="small">${esc(q.label)} · <b>${q.score ?? "n/a"}</b> / 100 ${quickChip(c)}${chips(q)}</div></div></div>
-      ${quickOf(c) ? `<p class="note">Quick look: graded automatically from the SEC filings${quickOf(c).source == "phone" ? " after you looked it up on the phone" : ""}, with default projections and no execution inputs. Grade it on the PC (Companies → Check SEC and grade) to make it yours.</p>` : ""}
+      ${quickOf(c) ? `<p class="note">Quick look: graded automatically from the SEC filings${quickOf(c).source == "phone" ? (graded(c.ticker) ? " after you looked it up on the phone" : " on this phone, with the same engine as the PC") : ""}, with default projections and no execution inputs. Grade it on the PC (Companies → Check SEC and grade) to make it yours.</p>` : ""}
       <div class="facts">${facts.map(s => `<span>${esc(s)}</span>`).join("")}</div>
       ${c.compare ? `<button class="cmpbtn" onclick="cmpWith('${c.ticker}')">Compare with others →</button>` : ""}</div>`;
 
