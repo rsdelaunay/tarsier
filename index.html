@@ -32,6 +32,19 @@ nav a svg{display:block;margin:0 auto 2px;width:22px;height:22px;stroke:currentC
 nav a.on{color:var(--navy)}
 nav a.on svg{stroke:var(--navy)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
+.mkt{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.mkt div{background:var(--soft);border-radius:10px;padding:8px 9px}
+.mkt .k{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.4px}
+.mkt .p{font-size:17px;font-weight:700;white-space:nowrap}
+.mkt .y{font-size:12px;font-weight:700}
+.mkt .a{font-size:10.5px;color:var(--muted)}
+.warn{background:#FFF8D6;border:2px solid #F2CC3D;border-radius:12px;padding:12px 14px;margin-bottom:10px;color:#3D3300}
+.warn .wh{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
+.warn ul{list-style:none;margin:8px 0 0;padding:0}
+.warn li{display:flex;gap:8px;padding:5px 0;font-size:13px;line-height:1.35}
+.warn li i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;background:#C9A400}
+.warn li i.hi{background:var(--bad)}
+.warn.okw{background:#E8F4EA;border-color:#9CCFA6;color:var(--ok)}
 .h{font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--navy);text-transform:uppercase;margin:0 0 8px}
 .muted{color:var(--muted)} .small{font-size:12px} .tiny{font-size:11px}
 .badge{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;border-radius:8px}
@@ -757,13 +770,135 @@ function fold(list, max = 8) {
   return [...keep, ["Other", rest.reduce((a, [, w]) => a + w, 0)]];
 }
 
+// ---------- the market (QQQ, S&P 500, VIX) and your portfolio rules ----------
+const MKT = [["QQQ", "QQQ", "Nasdaq-100"], ["^GSPC", "S&P 500", "index"], ["^VIX", "VIX", "volatility"]];
+let MK = null, mkBusy = false, mkNote = "";
+function chartMeta(j) { return ((j.chart || {}).result || [])[0] || null; }
+async function marketLive() {
+  const old = LS.get("tarsier.mkt", {}), now = Date.now(), out = {};
+  const jan1 = Date.UTC(new Date().getUTCFullYear(), 0, 1) / 1000;
+  for (const [sym, label] of MKT) {
+    const c = old[label];
+    if (c && now - c.at < 15 * 60 * 1000) { out[label] = c; continue; }
+    const r = await fetch(`${RELAY}/ytd/${sym}`);
+    if (!r.ok) throw new Error(r.status == 404 ? "relay without market routes" : `relay answered ${r.status}`);
+    const res = chartMeta(await r.json()); if (!res || !res.meta || !res.meta.regularMarketPrice) throw new Error("no price for " + label);
+    const price = res.meta.regularMarketPrice, ts = res.timestamp || [], cl = (((res.indicators || {}).quote || [])[0] || {}).close || [];
+    let base = null; ts.forEach((t, i) => { if (t < jan1 && cl[i] > 0) base = cl[i]; });
+    let ath = c && c.ath, athAt = c ? c.athAt || 0 : 0;
+    if (label != "VIX" && (!ath || now - athAt > 864e5)) {
+      try { const a = await fetch(`${RELAY}/ath/${sym}`); if (a.ok) { const q = (((chartMeta(await a.json()) || {}).indicators || {}).quote || [])[0] || {};
+        const hs = (q.high || []).filter(x => x > 0); if (hs.length) { ath = Math.max(...hs); athAt = now; } } } catch (e) {}
+    }
+    if (label != "VIX") ath = Math.max(...[ath, res.meta.fiftyTwoWeekHigh, price].filter(x => x > 0));
+    out[label] = {price, ytd: base ? price / base - 1 : null, ath: label == "VIX" ? null : ath, athAt,
+      from_ath: label == "VIX" ? null : price / ath - 1, at: now,
+      time: res.meta.regularMarketTime ? new Date(res.meta.regularMarketTime * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC" : ""};
+  }
+  LS.set("tarsier.mkt", out);
+  return out;
+}
+async function loadMarket(force) {
+  // fresh enough, or failed less than 2 minutes ago: nothing to do (also stops a redraw loop)
+  if (mkBusy || (MK && !force && Date.now() - MK._at < (MK._live ? 15 : 2) * 60 * 1000)) return;
+  mkBusy = true;
+  if (force) LS.set("tarsier.mkt", {});
+  try { MK = Object.assign(await marketLive(), {_live: true, _at: Date.now()}); mkNote = ""; }
+  catch (e) {
+    MK = D && D.market ? Object.assign({}, D.market, {_live: false, _at: Date.now()}) : null;
+    mkNote = MK ? `Live prices unavailable (${e.message}): figures from the PC's last Sync, ${D.generated}.` : `No market prices: ${e.message}.`;
+  }
+  mkBusy = false;
+  if ((location.hash || "").startsWith("#/portfolio")) route();
+}
+function marketDD(m) {
+  const d = ["QQQ", "S&P 500"].map(k => m && m[k] && m[k].from_ath).filter(x => typeof x == "number");
+  return d.length ? -d.reduce((a, b) => a + b, 0) / d.length : null;
+}
+function cashTarget(dd, R) {
+  if (dd == null) return null;
+  if (dd <= R.dd_highs) return R.cash_max;
+  if (dd >= R.dd_correction) return R.cash_min;
+  return R.cash_max - (dd - R.dd_highs) / (R.dd_correction - R.dd_highs) * (R.cash_max - R.cash_min);
+}
+function marketCard() {
+  const m = MK || (D && D.market) || {};
+  const tile = ([, label, name]) => { const x = m[label];
+    if (!x) return `<div><div class="k">${label}</div><div class="p">—</div><div class="a">${mkBusy || !MK ? "loading…" : name}</div></div>`;
+    const y = x.ytd, col = y == null || label == "VIX" ? "var(--muted)" : y >= 0 ? "var(--ok)" : "var(--bad)";
+    const sub = label == "VIX" ? (x.price < 15 ? "calm" : x.price < 20 ? "normal" : x.price < 30 ? "nervous" : "fear")
+      : x.from_ath == null ? name : x.from_ath > -0.005 ? "at its high" : `${(-x.from_ath * 100).toFixed(1)}% below high`;
+    return `<div><div class="k">${label}</div><div class="p">${label == "QQQ" ? "$" : ""}${Number(x.price).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+      <div class="y" style="color:${col}">YTD ${y == null ? "—" : (y >= 0 ? "+" : "") + (y * 100).toFixed(1) + "%"}</div><div class="a">${sub}</div></div>`; };
+  const p = D && D.portfolio, R = p && p.rules;
+  const dd = marketDD(m), tgt = R ? cashTarget(dd, R) : null;
+  const cash = p && p.holdings ? (p.holdings.find(h => h.t == "CASH") || {w: 0}).w : null;
+  const t = Object.values(m).find(x => x && x.time);
+  return `<div class="card"><div class="h" style="display:flex;justify-content:space-between">Market
+      <span onclick="loadMarket(true)" style="cursor:pointer;color:var(--muted);font-size:15px;letter-spacing:0">↻</span></div>
+    <div class="mkt">${MKT.map(tile).join("")}</div>
+    ${tgt != null ? `<p class="small" style="margin:8px 0 0">Cash target now: <b>${(tgt * 100).toFixed(0)}%</b> (QQQ and the S&amp;P 500 ${(dd * 100).toFixed(1)}% below their highs on average).${cash != null ? ` You hold ${cash.toFixed(0)}%.` : ""}</p>` : ""}
+    <p class="note" style="margin-top:4px">${mkNote ? esc(mkNote) : t ? "Yahoo Finance · " + esc(t.time) : ""}</p></div>`;
+}
+// the same checks as the Warnings box on the PC (port_check.py), on the weights the PC sends
+function portChecks(p, m) {
+  const R = p.rules, H = p.holdings || [], out = [], pct = w => Math.round(w * 100) + "%";
+  const add = (level, head, text) => out.push({level, head, text});
+  const w = h => h.w / 100, cashH = H.find(h => h.t == "CASH"), cash = cashH ? w(cashH) : 0, inv = 1 - cash;
+  const isFund = h => h.fund || h.sector == "Diversified (fund)";
+  for (const h of H) {
+    if (h.t == "CASH" || isFund(h)) continue;
+    const cap = R.caps[h.conviction || R.default];
+    if (w(h) <= cap + 1e-9) continue;
+    if (h.conviction) add("high", `${h.t} is ${pct(w(h))}`, `above the ${pct(cap)} you allow a ${h.conviction.toLowerCase()} position. Trim ${pct(w(h) - cap)} or move it up a level if your view changed.`);
+    else { const top = R.caps["High conviction"]; add(w(h) > top ? "high" : "medium", `${h.t} is ${pct(w(h))}`, `above ${pct(cap)} with no conviction set. Mark it High conviction (up to ${pct(top)}) on the PC if it is one, otherwise trim.`); }
+  }
+  const gam = H.filter(h => h.conviction == "Gamble"), gw = gam.reduce((a, h) => a + w(h), 0);
+  if (gw > R.gambles_max) add("medium", `Gambles add up to ${pct(gw)}`, `${gam.length} gambles of up to ${pct(R.caps.Gamble)} each: together above ${pct(R.gambles_max)} of the portfolio.`);
+  const dd = marketDD(m), tgt = cashTarget(dd, R);
+  if (!cashH) add("high", "No cash line", `add a CASH row on the PC with the money not invested: your rule keeps ${pct(R.cash_min)}–${pct(R.cash_max)} in cash.`);
+  else if (tgt != null) {
+    const where = dd >= 0.005 ? `QQQ and the S&P 500 are ${(dd * 100).toFixed(0)}% below their highs on average` : "QQQ and the S&P 500 are at their highs";
+    if (cash < tgt - R.tolerance) add(cash < R.cash_min ? "high" : "medium", `Cash ${pct(cash)}, target ${pct(tgt)}`, `${where}: keep more cash for the next correction.`);
+    else if (cash > tgt + R.tolerance) add(cash > R.cash_max ? "high" : "medium", `Cash ${pct(cash)}, target ${pct(tgt)}`, `${where}: the market has corrected, time to put cash to work.`);
+  } else if (cash < R.cash_min) add("high", `Cash ${pct(cash)}`, `below your ${pct(R.cash_min)} minimum.`);
+  else if (cash > R.cash_max) add("medium", `Cash ${pct(cash)}`, `above your ${pct(R.cash_max)} maximum.`);
+  if (inv > 0) {
+    const sec = {}, sty = {};
+    for (const h of H) {
+      if (h.t == "CASH") continue;
+      if (!["Diversified (fund)", "Cash", "Not classified"].includes(h.sector)) sec[h.sector] = (sec[h.sector] || 0) + w(h) / inv;
+      sty[h.style] = (sty[h.style] || 0) + w(h) / inv;
+    }
+    Object.entries(sec).sort((a, b) => b[1] - a[1]).forEach(([s, x]) => { if (x > R.sector_max)
+      add(x > 0.6 ? "high" : "medium", `${s} is ${pct(x)} of what is invested`, `above ${pct(R.sector_max)} in one sector: one bad cycle hits most of the portfolio.`); });
+    const def = (sty.Value || 0) + (sty.Dividend || 0);
+    if (def == 0) add("medium", "No value or dividend stocks", "everything rides on growth: nothing to lean on when growth falls out of favour.");
+    else if (def < R.defensive_min) add("medium", `Value and dividend only ${pct(def)}`, `below ${pct(R.defensive_min)} of what is invested: the portfolio is almost all growth.`);
+  }
+  for (const h of H) { const c = D.companies.find(x => x.ticker == h.t), l = c && c.latest;
+    if (l && !l.unsupported && R.weak.includes(l.grade)) add("medium", `${h.t} graded ${l.grade}`, "last quarter was weak: re-read the thesis."); }
+  const unk = H.filter(h => h.t != "CASH" && (h.sector == "Not classified" || h.style == "Not classified")).map(h => h.t);
+  if (unk.length) add("medium", "Not classified", `${unk.join(", ")}: choose sector and style on the PC, so the checks above count ${unk.length > 1 ? "them" : "it"}.`);
+  return out.sort((a, b) => (a.level == "high" ? 0 : 1) - (b.level == "high" ? 0 : 1));
+}
+const SIGN = `<svg width="24" height="22" viewBox="0 0 26 23"><path d="M13 2 25 21H1z" fill="#F5C518" stroke="#3D3300" stroke-width="2" stroke-linejoin="round"/><text x="13" y="18.5" text-anchor="middle" font-size="12" font-weight="700" fill="#3D3300" font-family="sans-serif">!</text></svg>`;
+function warningsBox(p) {
+  if (!p.holdings || !p.rules) return `<div class="card small muted">Warnings appear after the next Sync from the PC.</div>`;
+  const ws = portChecks(p, MK || D.market || {});
+  if (!ws.length) return `<div class="warn okw"><div class="wh">✓ No warnings: the portfolio follows your rules</div></div>`;
+  return `<div class="warn"><div class="wh">${SIGN} Warnings · ${ws.length}</div><ul>${ws.map(x =>
+    `<li><i class="${x.level == "high" ? "hi" : ""}"></i><span><b>${esc(x.head)}</b> · ${esc(x.text)}</span></li>`).join("")}</ul></div>`;
+}
+
 function portfolio() {
   const p = D && D.portfolio;
   if (!p) return `<div class="empty">No portfolio yet.<br>Fill the Portfolio page in Tarsier on your PC.</div>`;
   const STY = {Growth: "#2a78d6", Value: "#eb6834", Dividend: "#1baf7a", "Blend (index fund)": "#6250d6"};
   const mk = list => { const order = list.map(([n]) => n).filter(n => n != "Other" && n != "Not classified");
     return n => n == "Other" ? "#AEB6C1" : n == "Not classified" ? "#D5DAE1" : (STY[n] && list === p.style ? STY[n] : SLOTS[order.indexOf(n) % SLOTS.length]); };
-  return `<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
+  setTimeout(loadMarket, 0);
+  return `${marketCard()}${warningsBox(p)}`+`<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
     <div class="card"><div class="h">By sector</div>${donut(fold(p.sector), mk(p.sector))}</div>
     <div class="card"><div class="h">By style</div>${donut(p.style, mk(p.style))}</div>
     <p class="note" style="text-align:center">Shares of the money invested. Amounts stay on the PC.</p>`;
