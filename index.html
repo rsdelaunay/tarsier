@@ -36,6 +36,8 @@ nav a.on svg{stroke:var(--navy)}
 .muted{color:var(--muted)} .small{font-size:12px} .tiny{font-size:11px}
 .badge{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;border-radius:8px}
 .chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;margin-right:4px;vertical-align:2px}
+.chip.quick{background:#FFF1D6;color:#8A5A00;border:1px solid #F0D9A8}
+table.cmp .qtag{font-size:8.5px;font-weight:700;letter-spacing:.3px;color:#8A5A00;background:#FFF1D6;border-radius:4px;padding:1px 4px;display:table;margin:0 0 3px auto}
 .chip.prov{background:#FFF1D6;color:#8A5A00}.chip.pre{background:#DCE8FB;color:var(--blue)}.chip.nc{background:#F9D7D3;color:var(--bad)}
 .summary{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 10px}
 .sorts button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 10px;font:600 12px inherit;color:var(--ink);margin-left:4px}
@@ -271,13 +273,15 @@ async function livePrice(t) {
   return out;
 }
 let pxBusy = false, pxNote = "";
+const pxFailed = {};                                // ticker -> when its price last failed: wait 2 minutes
 async function refreshPrices(ts) {
   if (pxBusy) return;
-  const stale = ts.filter(t => { const c = PX()[t]; return !c || Date.now() - c.at >= 15 * 60 * 1000; });
+  const now = Date.now();
+  const stale = ts.filter(t => { const c = PX()[t]; return (!c || now - c.at >= 15 * 60 * 1000) && !(now - (pxFailed[t] || 0) < 120000); });
   if (!stale.length) return;
   pxBusy = true;
   const miss = [];
-  await Promise.all(stale.map(t => livePrice(t).catch(() => miss.push(t))));
+  await Promise.all(stale.map(t => livePrice(t).catch(() => { miss.push(t); pxFailed[t] = Date.now(); })));
   pxBusy = false;
   pxNote = miss.length ? "No live price for: " + miss.join(", ") + "." : "";
   if ((location.hash || "").startsWith("#/compare")) route();
@@ -328,6 +332,12 @@ async function lookUp(raw) {
   location.hash = "#/compare"; route();
 }
 
+// graded automatically (Compare on the PC, or looked up on the phone) and not analysed yet
+function quickOf(c) { return c && c.compare && c.compare.quick; }
+function quickChip(c) {
+  const k = quickOf(c);
+  return k ? `<span class="chip quick" title="Graded automatically from the SEC filings; not analysed yet">QUICK LOOK</span>` : "";
+}
 function chips(q) {
   return (q.preliminary ? '<span class="chip pre">PRELIMINARY</span>' : "") +
          (q.unsupported ? '<span class="chip nc">NOT COMPARABLE</span>' : "") +
@@ -376,7 +386,7 @@ function cardHtml(c) {
      <div class="how">${howShort(v)}</div>` : "";
   return `<div class="card co" onclick="location.hash='#/c/${c.ticker}'">
     <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
-    <div class="mid"><div class="t">${esc(c.ticker)} ${chips(q)}</div><div class="n">${esc(c.name)}</div>
+    <div class="mid"><div class="t">${esc(c.ticker)} ${quickChip(c)}${chips(q)}</div><div class="n">${esc(c.name)}</div>
       <div class="ind">${esc(c.industry || c.sector || "")}</div>
       <div class="tiny muted">${esc(q.label)} · ${q.score ?? "n/a"} / 100 ${spark(c.history)}</div></div>
     <div class="right">${right}</div>${kpis(c)}</div>`;
@@ -564,7 +574,7 @@ function comparePage() {
   const src = [...new Set(cols.map(c => c.price_source).filter(Boolean))];
   const phoneOnly = cols.filter(c => c._src == "phone").map(c => c._t);
   html += `<div class="card"><div class="cmp-wrap"><table class="cmp"><thead><tr><th></th>${cols.map(c => `<th${c._src == "pc" ? ` onclick="location.hash='#/c/${c._t}'"` : ""}>
-      <div class="badge" style="background:${gcol(c._grade)}">${esc(c._grade || "—")}</div><div>${esc(c._t)}</div></th>`).join("")}</tr></thead>
+      ${c.quick ? `<div class="qtag">QUICK LOOK</div>` : c._src == "phone" ? `<div class="qtag">PHONE ONLY</div>` : ""}<div class="badge" style="background:${gcol(c._grade)}">${esc(c._grade || "—")}</div><div>${esc(c._t)}</div></th>`).join("")}</tr></thead>
       <tbody>${rows}</tbody></table></div>
     <p class="note">${pxBusy ? "Getting live prices… " : ""}${src.length ? "Prices: " + esc(src.join("; ")) + ". " : ""}${esc(pxNote)}
     ${phoneOnly.length ? `<br>${esc(phoneOnly.join(", "))}: looked up on the phone, so no grade, forward P/E or fair value until the PC grades ${phoneOnly.length > 1 ? "them" : "it"} at the next Sync.` : ""}
@@ -613,7 +623,8 @@ function company(t) {
   let html = `<div class="card"><div class="hero">
       <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
       <div><div class="t">${esc(c.ticker)}</div><div class="small muted">${esc(c.name)}</div>
-      <div class="small">${esc(q.label)} · <b>${q.score ?? "n/a"}</b> / 100 ${chips(q)}</div></div></div>
+      <div class="small">${esc(q.label)} · <b>${q.score ?? "n/a"}</b> / 100 ${quickChip(c)}${chips(q)}</div></div></div>
+      ${quickOf(c) ? `<p class="note">Quick look: graded automatically from the SEC filings${quickOf(c).source == "phone" ? " after you looked it up on the phone" : ""}, with default projections and no execution inputs. Grade it on the PC (Companies → Check SEC and grade) to make it yours.</p>` : ""}
       <div class="facts">${facts.map(s => `<span>${esc(s)}</span>`).join("")}</div>
       ${c.compare ? `<button class="cmpbtn" onclick="cmpWith('${c.ticker}')">Compare with others →</button>` : ""}</div>`;
 
