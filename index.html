@@ -80,6 +80,12 @@ nav a.on svg{stroke:var(--navy)}
 .ptr{margin-top:12px;font-size:13px}
 .ptr .pt{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--navy);text-transform:uppercase;margin-bottom:4px}
 .cmpbtn{margin-top:10px;width:100%;border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:9px;font:600 13px inherit;color:var(--navy)}
+.look{display:flex;gap:8px;margin-top:8px}
+.look input{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:9px 10px;font:14px inherit;text-transform:uppercase}
+.look button,.set button{border:0;background:var(--navy);color:#fff;border-radius:10px;padding:0 14px;font:600 13px inherit}
+.set input{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 10px;font:14px inherit;margin:6px 0}
+.set .row2{display:flex;gap:8px}
+.set .row2 button{padding:9px 14px}
 .cmp-sel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .cmp-sel span{display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;border-radius:999px;padding:5px 6px 5px 11px;font-weight:700;font-size:13px}
 .cmp-sel span button{border:0;background:rgba(255,255,255,.18);color:#fff;border-radius:999px;width:20px;height:20px;font-size:12px;line-height:20px;padding:0}
@@ -176,8 +182,11 @@ p{margin:6px 0}
   <a href="#/portfolio" id="n-p"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 5"/></svg>Portfolio</a>
   <a href="#/method" id="n-m"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Method</a>
 </nav>
+<script src="sec.js"></script>
 <script>
 "use strict";
+const RELAY = "https://tarsier-relay.rmsdelaunay.workers.dev";
+const GH = {owner: "rsdelaunay", repo: "tarsier"};
 let D = null, sortBy = "grade", selQ = null, selT = null, sector = "All", query = "";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -200,6 +209,123 @@ async function load() {
     D = window.TARSIER_DATA || null;
   }
   route();
+  loadRaw().then(() => { if ((location.hash || "").startsWith("#/compare")) route(); });
+}
+
+// ---------- this phone's own look-ups, shared through the GitHub repository ----------
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+};
+let RAW = {};          // ticker -> {ticker, name, cik, fetched, source, column}
+async function loadRaw() {
+  RAW = Object.assign({}, LS.get("tarsier.raw", {}));
+  try {
+    const r = await fetch("raw/index.json?" + Date.now(), {cache: "no-store"});
+    if (r.ok) {
+      const idx = (await r.json()).tickers || {};
+      await Promise.all(Object.keys(idx).map(async t => {
+        if (RAW[t] && RAW[t].fetched >= (idx[t].fetched || "")) return;
+        try { const x = await fetch(`raw/${t}.json?` + Date.now(), {cache: "no-store"}); if (x.ok) RAW[t] = await x.json(); } catch (e) {}
+      }));
+    }
+  } catch (e) {}
+  LS.set("tarsier.raw", RAW);
+}
+const graded = t => D && D.companies.find(c => c.ticker == t && c.compare);
+function rawOnly() { return Object.values(RAW).filter(r => r && r.column && !graded(r.ticker)); }
+
+function b64(str) { return btoa(unescape(encodeURIComponent(str))); }
+async function ghPut(path, text, message) {
+  const token = LS.get("tarsier.token", "");
+  if (!token) return false;
+  const api = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+  const hdr = {Authorization: "Bearer " + token, Accept: "application/vnd.github+json"};
+  let sha;
+  const g = await fetch(api, {headers: hdr, cache: "no-store"});
+  if (g.ok) sha = (await g.json()).sha;
+  else if (g.status == 401) throw new Error("GitHub refused the token (Method tab → Phone settings).");
+  const p = await fetch(api, {method: "PUT", headers: hdr, body: JSON.stringify({message, content: b64(text), sha})});
+  if (!p.ok) throw new Error(`GitHub answered ${p.status} while saving ${path}.`);
+  return true;
+}
+async function ghGetJSON(path) {
+  const token = LS.get("tarsier.token", "");
+  const r = await fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`,
+    {headers: Object.assign({Accept: "application/vnd.github.raw+json"}, token ? {Authorization: "Bearer " + token} : {}), cache: "no-store"});
+  return r.ok ? r.json() : null;
+}
+
+// ---------- live prices through the relay (kept 15 minutes on the phone) ----------
+const PX = () => LS.get("tarsier.px", {});
+async function livePrice(t) {
+  const c = PX()[t];
+  if (c && Date.now() - c.at < 15 * 60 * 1000) return c;
+  const r = await fetch(`${RELAY}/price/${encodeURIComponent(t)}`);
+  if (!r.ok) throw new Error(`no price for ${t}`);
+  const m = (((await r.json()).chart || {}).result || [])[0];
+  const p = m && m.meta && m.meta.regularMarketPrice;
+  if (!p) throw new Error(`no price for ${t}`);
+  const out = {price: p, time: m.meta.regularMarketTime ? new Date(m.meta.regularMarketTime * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "", at: Date.now()};
+  const all = PX(); all[t] = out; LS.set("tarsier.px", all);
+  return out;
+}
+let pxBusy = false, pxNote = "";
+async function refreshPrices(ts) {
+  if (pxBusy) return;
+  const stale = ts.filter(t => { const c = PX()[t]; return !c || Date.now() - c.at >= 15 * 60 * 1000; });
+  if (!stale.length) return;
+  pxBusy = true;
+  const miss = [];
+  await Promise.all(stale.map(t => livePrice(t).catch(() => miss.push(t))));
+  pxBusy = false;
+  pxNote = miss.length ? "No live price for: " + miss.join(", ") + "." : "";
+  if ((location.hash || "").startsWith("#/compare")) route();
+}
+
+// ---------- look up any US-listed company at the SEC, from the phone ----------
+async function cikOf(t) {
+  let map = LS.get("tarsier.cik", null);
+  if (!map || Date.now() - (map._at || 0) > 7 * 864e5) {
+    const r = await fetch(`${RELAY}/sec/tickers`);
+    if (!r.ok) throw new Error("the SEC list of companies did not load");
+    const j = await r.json();
+    map = {_at: Date.now()};
+    Object.values(j).forEach(x => { map[String(x.ticker).toUpperCase()] = [x.cik_str, x.title]; });
+    LS.set("tarsier.cik", map);
+  }
+  const hit = map[t] || map[t.replace(".", "-")];
+  if (!hit) throw new Error(`${t} is not listed at the SEC (a foreign company filing 20-F, or a typo?)`);
+  return {cik: "CIK" + String(hit[0]).padStart(10, "0"), name: hit[1]};
+}
+let lookMsg = "";
+async function lookUp(raw) {
+  const t = String(raw || "").trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(t)) { lookMsg = "Type a ticker, e.g. MSFT."; route(); return; }
+  lookMsg = `Getting ${t} from the SEC…`; route();
+  try {
+    const {cik, name} = await cikOf(t);
+    const r = await fetch(`${RELAY}/sec/facts/${cik}`);
+    if (!r.ok) throw new Error(`the SEC has no financial data for ${t}`);
+    const facts = await r.json();
+    let px = null;
+    try { px = (await livePrice(t)).price; } catch (e) {}
+    const column = TSEC.compute(facts, px);
+    const entry = {ticker: t, name: facts.entityName || name, cik, fetched: new Date().toISOString(), source: "phone", column};
+    RAW[t] = entry; LS.set("tarsier.raw", RAW);
+    cmpLoad(); if (!cmpSel.includes(t)) { if (cmpSel.length >= 5) cmpSel.pop(); cmpSel.push(t); } cmpSave();
+    lookMsg = `${t}: latest quarter ${column.end}.`;
+    try {
+      const saved = await ghPut(`raw/${t}.json`, JSON.stringify(entry), `Phone: look up ${t}`);
+      if (saved) {
+        const idx = (await ghGetJSON("raw/index.json")) || {tickers: {}};
+        idx.tickers = idx.tickers || {}; idx.tickers[t] = {fetched: entry.fetched, source: "phone"};
+        await ghPut("raw/index.json", JSON.stringify(idx, null, 1), `Phone: list ${t}`);
+        lookMsg += " Synced: the PC grades it at its next Sync with phone.";
+      } else lookMsg += " Kept on this phone (add the GitHub token in Method → Phone settings to sync with the PC).";
+    } catch (e) { lookMsg += " Not synced: " + e.message; }
+  } catch (e) { lookMsg = "Could not get it: " + e.message; }
+  location.hash = "#/compare"; route();
 }
 
 function chips(q) {
@@ -264,7 +390,9 @@ function listHtml() {
   if (sortBy == "upside") cs.sort((a, b) => (up(b) ?? -1e9) - (up(a) ?? -1e9));
   else if (sortBy == "az") cs.sort((a, b) => a.ticker.localeCompare(b.ticker));
   else cs.sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0));
-  return (cs.length ? cs.map(cardHtml).join("") : `<div class="empty">Nothing matches.</div>`) +
+  const tk = query.trim().toUpperCase();
+  const look = /^[A-Z][A-Z0-9.\-]{0,9}$/.test(tk) ? `<br><button class="cmpbtn" style="width:auto;padding:9px 16px" onclick="lookUp('${tk}')">Get ${esc(tk)} from the SEC →</button>` : "";
+  return (cs.length ? cs.map(cardHtml).join("") : `<div class="empty">Nothing matches.${look}</div>`) +
     (D.skipped && D.skipped.length ? `<p class="note">Not shown: ${D.skipped.map(s => esc(s[0])).join(", ")} (no quarterly SEC data).</p>` : "");
 }
 
@@ -336,18 +464,33 @@ let cmpSel = null;
 function cmpLoad() {
   if (cmpSel) return;
   try { cmpSel = JSON.parse(localStorage.getItem("tarsier.compare") || "null"); } catch (e) { cmpSel = null; }
-  const have = new Set(D.companies.filter(c => c.compare).map(c => c.ticker));
+  const have = new Set([...D.companies.filter(c => c.compare).map(c => c.ticker), ...rawOnly().map(r => r.ticker)]);
   cmpSel = (Array.isArray(cmpSel) ? cmpSel : []).filter(t => have.has(t)).slice(0, 5);
   if (!cmpSel.length) cmpSel = [...D.companies].filter(c => c.compare)
     .sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0)).slice(0, 3).map(c => c.ticker);
 }
 function cmpSave() { try { localStorage.setItem("tarsier.compare", JSON.stringify(cmpSel)); } catch (e) {} }
 function cmpAdd(t) { cmpLoad(); if (t && !cmpSel.includes(t) && cmpSel.length < 5) cmpSel.push(t); cmpSave(); route(); }
+// one Compare column, graded on the PC or looked up on the phone, at the freshest price there is
+function cmpCol(t) {
+  const g = graded(t), r = RAW[t];
+  const base = g ? Object.assign({}, g.compare, {_name: g.name, _grade: g.latest.grade, _src: "pc"})
+             : r && r.column ? Object.assign({}, r.column, {_name: r.name, _grade: null, _src: "phone", _fetched: r.fetched}) : null;
+  if (!base) return null;
+  const live = PX()[t];
+  if (live && live.price && typeof TSEC != "undefined") {
+    const c = TSEC.reprice(base, live.price);
+    c.price_source = "live, " + live.time;
+    return c;
+  }
+  return base;
+}
 function cmpDel(t) { cmpSel = cmpSel.filter(x => x != t); cmpSave(); route(); }
 function cmpSector(s) {
   if (!s) return;
-  cmpSel = D.companies.filter(c => c.compare && (c.sector || "Other") == s)
-    .sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0)).slice(0, 5).map(c => c.ticker);
+  cmpSel = s == "Looked up on the phone" ? rawOnly().map(r => r.ticker).slice(0, 5)
+    : D.companies.filter(c => c.compare && (c.sector || "Other") == s)
+      .sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0)).slice(0, 5).map(c => c.ticker);
   cmpSave(); route();
 }
 function cmpWith(t) { cmpLoad(); if (!cmpSel.includes(t)) { if (cmpSel.length >= 5) cmpSel.pop(); cmpSel.unshift(t); } cmpSave(); location.hash = "#/compare"; }
@@ -381,29 +524,35 @@ function cbest(cols, key, kind, better) {
 }
 
 function comparePage() {
-  if (!D || !D.compare_rows) return `<div class="empty">Publish again from the PC to use Compare.</div>`;
+  if (!D || !D.compare_rows) return `<div class="empty">Sync again from the PC to use Compare.</div>`;
   cmpLoad();
-  const cs = cmpSel.map(t => D.companies.find(c => c.ticker == t)).filter(Boolean);
-  const cols = cs.map(c => c.compare);
-  const free = D.companies.filter(c => c.compare && !cmpSel.includes(c.ticker)).map(c => c.ticker).sort();
+  const cols = cmpSel.map(t => { const c = cmpCol(t); return c && Object.assign(c, {_t: t}); }).filter(Boolean);
+  const pool = [...D.companies.filter(c => c.compare).map(c => [c.ticker, c.sector || "Other", ""]),
+                ...rawOnly().map(r => [r.ticker, "Looked up on the phone", " · phone"])];
+  const free = pool.filter(([t]) => !cmpSel.includes(t)).sort((a, b) => a[0].localeCompare(b[0]));
   const count = {};
-  D.companies.forEach(c => { if (c.compare) { const k = c.sector || "Other"; count[k] = (count[k] || 0) + 1; } });
+  pool.forEach(([, s]) => { count[s] = (count[s] || 0) + 1; });
+  setTimeout(() => refreshPrices(cmpSel), 0);
   let html = `<div class="card"><div class="h">Compare <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· up to five · best in green</span></div>
-    <div class="cmp-sel">${cs.map(c => `<span>${esc(c.ticker)}<button onclick="cmpDel('${c.ticker}')" aria-label="Remove">✕</button></span>`).join("")}</div>
+    <div class="cmp-sel">${cols.map(c => `<span>${esc(c._t)}<button onclick="cmpDel('${c._t}')" aria-label="Remove">✕</button></span>`).join("")}</div>
     <div class="cmp-pick">
-      <select onchange="cmpAdd(this.value)" ${cmpSel.length >= 5 ? "disabled" : ""}><option value="">+ Add company</option>${free.map(t => `<option>${esc(t)}</option>`).join("")}</select>
+      <select onchange="cmpAdd(this.value)" ${cmpSel.length >= 5 ? "disabled" : ""}><option value="">+ Add company</option>${free.map(([t, , tag]) => `<option value="${esc(t)}">${esc(t + tag)}</option>`).join("")}</select>
       <select onchange="cmpSector(this.value)"><option value="">Fill with a sector</option>${Object.keys(count).sort((a, b) => count[b] - count[a]).map(k => `<option value="${esc(k)}">${esc(k)} (${count[k]})</option>`).join("")}</select>
-    </div></div>`;
+    </div>
+    <form class="look" onsubmit="lookUp(this.t.value);return false">
+      <input name="t" placeholder="Any US ticker, e.g. MSFT" autocapitalize="characters" autocomplete="off">
+      <button>Get from SEC</button></form>
+    ${lookMsg ? `<p class="note">${esc(lookMsg)}</p>` : ""}</div>`;
   if (!cols.length) return html + `<div class="empty">Add companies to compare.</div>`;
   const fy = [...new Set(cols.map(c => c.fwd_year).filter(Boolean))];
   let rows = "", sec = null;
-  D.compare_rows.forEach((r, n) => {
+  D.compare_rows.forEach(r => {
     if (r.key == "business" && cols.every(c => !c.business || c.business == "—")) return;
     if (r.section != sec) { sec = r.section; rows += `<tr class="sec"><td colspan="${cols.length + 1}"><div class="stk">${esc(sec)}</div></td></tr>`; }
     const b = cbest(cols, r.key, r.kind, r.better);
     let label = r.label;
     if (r.key == "fpe" && fy.length == 1) label = `Forward P/E (${fy[0].replace("E", "")})`;
-    const arr = r.better == "high" ? "\u00a0↑" : r.better == "low" ? "\u00a0↓" : "";
+    const arr = r.better == "high" ? " ↑" : r.better == "low" ? " ↓" : "";
     const help = (r.help || "") + (r.better ? (r.help ? " " : "") + (r.better == "high" ? "Higher is better." : "Lower is better.") : "");
     rows += `<tr class="row"${help ? ` onclick="const h=this.nextElementSibling;h.style.display=h.style.display=='table-row'?'none':'table-row'"` : ""}>
       <td>${esc(label)}<span class="arr">${arr}</span></td>${cols.map((c, i) => {
@@ -413,10 +562,13 @@ function comparePage() {
       ${help ? `<tr class="hlp" style="display:none"><td colspan="${cols.length + 1}"><div class="stk">${esc(help)}</div></td></tr>` : ""}`;
   });
   const src = [...new Set(cols.map(c => c.price_source).filter(Boolean))];
-  html += `<div class="card"><div class="cmp-wrap"><table class="cmp"><thead><tr><th></th>${cs.map(c => `<th onclick="location.hash='#/c/${c.ticker}'">
-      <div class="badge" style="background:${gcol(c.latest.grade)}">${esc(c.latest.grade || "—")}</div><div>${esc(c.ticker)}</div></th>`).join("")}</tr></thead>
+  const phoneOnly = cols.filter(c => c._src == "phone").map(c => c._t);
+  html += `<div class="card"><div class="cmp-wrap"><table class="cmp"><thead><tr><th></th>${cols.map(c => `<th${c._src == "pc" ? ` onclick="location.hash='#/c/${c._t}'"` : ""}>
+      <div class="badge" style="background:${gcol(c._grade)}">${esc(c._grade || "—")}</div><div>${esc(c._t)}</div></th>`).join("")}</tr></thead>
       <tbody>${rows}</tbody></table></div>
-    <p class="note">${src.length ? "Prices: " + esc(src.join("; ")) + "." : "No market prices in this publish."} Tap a row name for how it is worked out; tap a ticker to open it.</p></div>`;
+    <p class="note">${pxBusy ? "Getting live prices… " : ""}${src.length ? "Prices: " + esc(src.join("; ")) + ". " : ""}${esc(pxNote)}
+    ${phoneOnly.length ? `<br>${esc(phoneOnly.join(", "))}: looked up on the phone, so no grade, forward P/E or fair value until the PC grades ${phoneOnly.length > 1 ? "them" : "it"} at the next Sync.` : ""}
+    <br>Tap a row name for how it is worked out.</p></div>`;
   return html;
 }
 
@@ -537,9 +689,38 @@ function portfolio() {
     <p class="note" style="text-align:center">Shares of the money invested. Amounts stay on the PC.</p>`;
 }
 
+function saveToken(v) {
+  LS.set("tarsier.token", (v || "").trim());
+  setMsg = v && v.trim() ? "Saved on this phone only." : "Token removed from this phone.";
+  route();
+}
+let setMsg = "";
+async function testSync() {
+  setMsg = "Checking…"; route();
+  try {
+    const r = await fetch(`${RELAY}/health`); const h = r.ok ? await r.json() : {};
+    const idx = await ghGetJSON("raw/index.json");
+    const token = LS.get("tarsier.token", "");
+    let gh = "no token";
+    if (token) { const x = await fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}`, {headers: {Authorization: "Bearer " + token}}); gh = x.ok ? "token works" : `token refused (${x.status})`; }
+    setMsg = `Relay: ${h.ok ? "ok" : "not answering"} · GitHub: ${gh} · looked up so far: ${idx ? Object.keys(idx.tickers || {}).length : 0}`;
+  } catch (e) { setMsg = "Check failed: " + e.message; }
+  route();
+}
+function settingsCard() {
+  const has = !!LS.get("tarsier.token", "");
+  return `<div class="card set"><div class="h">Phone settings</div>
+    <p class="small">To share what you look up on the phone with the PC, paste the same GitHub token the PC uses. It stays on this phone only.</p>
+    <input id="tok" type="password" placeholder="${has ? "Token saved · paste a new one to replace it" : "github_pat_…"}" autocomplete="off">
+    <div class="row2"><button onclick="saveToken(document.getElementById('tok').value)">Save token</button>
+      <button onclick="testSync()" style="background:var(--soft);color:var(--navy)">Check connection</button>
+      ${has ? `<button onclick="saveToken('')" style="background:var(--soft);color:var(--bad)">Remove</button>` : ""}</div>
+    ${setMsg ? `<p class="note">${esc(setMsg)}</p>` : ""}</div>`;
+}
+
 function method() {
   const g = D ? D.grades : [];
-  return `<div class="card"><div class="h">What Tarsier does</div>
+  return `${settingsCard()}<div class="card"><div class="h">What Tarsier does</div>
     <p>Every quarter a company reports to the SEC. Tarsier reads the filing, compares the quarter with the same quarter a year earlier, and grades it from <b>A+</b> to <b>F</b>.</p>
     <p class="small muted">See past the headlines: one grade, and the reasons behind it.</p></div>
   <div class="card"><div class="h">Five blocks</div><table>
