@@ -88,6 +88,8 @@ table.cmp .qtag{font-size:8.5px;font-weight:700;letter-spacing:.3px;color:#8A5A0
 .set input{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 10px;font:14px inherit;margin:6px 0}
 .set .row2{display:flex;gap:8px}
 .set .row2 button{padding:9px 14px}
+.set table.looked td{padding:7px 0;border-bottom:1px solid var(--line);vertical-align:middle}
+.set button.x{background:var(--soft);color:var(--muted);border-radius:999px;width:30px;height:30px;padding:0;font-size:13px}
 .cmp-sel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .cmp-sel span{display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;border-radius:999px;padding:5px 6px 5px 11px;font-weight:700;font-size:13px}
 .cmp-sel span button{border:0;background:rgba(255,255,255,.18);color:#fff;border-radius:999px;width:20px;height:20px;font-size:12px;line-height:20px;padding:0}
@@ -183,6 +185,7 @@ p{margin:6px 0}
   <a href="#/compare" id="n-c"><svg viewBox="0 0 24 24"><path d="M5 20V9M12 20V4M19 20v-8"/></svg>Compare</a>
   <a href="#/portfolio" id="n-p"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 5"/></svg>Portfolio</a>
   <a href="#/method" id="n-m"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Method</a>
+  <a href="#/settings" id="n-s"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
 </nav>
 <script src="sec.js"></script>
 <script>
@@ -251,9 +254,21 @@ async function ghPut(path, text, message) {
   let sha;
   const g = await fetch(api, {headers: hdr, cache: "no-store"});
   if (g.ok) sha = (await g.json()).sha;
-  else if (g.status == 401) throw new Error("GitHub refused the token (Method tab → Phone settings).");
+  else if (g.status == 401) throw new Error("GitHub refused the token (Settings tab).");
   const p = await fetch(api, {method: "PUT", headers: hdr, body: JSON.stringify({message, content: b64(text), sha})});
   if (!p.ok) throw new Error(`GitHub answered ${p.status} while saving ${path}.`);
+  return true;
+}
+async function ghDelete(path, message) {
+  const token = LS.get("tarsier.token", "");
+  if (!token) return false;
+  const api = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+  const hdr = {Authorization: "Bearer " + token, Accept: "application/vnd.github+json"};
+  const g = await fetch(api, {headers: hdr, cache: "no-store"});
+  if (g.status == 404) return true;
+  if (!g.ok) throw new Error(`GitHub answered ${g.status}.`);
+  const d = await fetch(api, {method: "DELETE", headers: hdr, body: JSON.stringify({message, sha: (await g.json()).sha})});
+  if (!d.ok) throw new Error(`GitHub answered ${d.status} while removing ${path}.`);
   return true;
 }
 async function ghGetJSON(path) {
@@ -378,7 +393,7 @@ async function lookUp(raw) {
         idx.tickers = idx.tickers || {}; idx.tickers[t] = {fetched: entry.fetched, source: "phone"};
         await ghPut("raw/index.json", JSON.stringify(idx, null, 1), `Phone: list ${t}`);
         lookMsg += " Saved for the PC too.";
-      } else lookMsg += " Kept on this phone (add the GitHub token in Method → Phone settings to share it with the PC).";
+      } else lookMsg += " Kept on this phone (add the GitHub token in Settings to share it with the PC).";
     } catch (e) { lookMsg += " Not shared with the PC: " + e.message; }
   } catch (e) { lookMsg = "Could not get it: " + e.message; company = null; }
   if (company) { query = ""; location.hash = "#/c/" + t; } else location.hash = "#/compare";
@@ -772,20 +787,91 @@ async function testSync() {
   } catch (e) { setMsg = "Check failed: " + e.message; }
   route();
 }
-function settingsCard() {
+// ---------- Settings: everything that is about this phone ----------
+let engMsg = "", cosMsg = "", pxMsg = "";
+async function engineState() {
+  if (PY) return "ready";
+  try { if (window.caches && await caches.match(new URL("py/pyodide/pyodide.asm.wasm", location.href).href)) return "saved"; } catch (e) {}
+  return "none";
+}
+async function getEngine() {
+  try { await engine(m => { engMsg = m; route(); }); engMsg = "Ready: grading works on this phone, also with a weak connection."; }
+  catch (e) { engMsg = "Could not download it: " + e.message; }
+  route();
+}
+async function removeLooked(t) {
+  const all = t ? [t] : Object.keys(RAW);
+  if (!all.length) return;
+  if (!t && !confirm(`Remove all ${all.length} companies looked up on the phone?`)) return;
+  all.forEach(x => delete RAW[x]); LS.set("tarsier.raw", RAW);
+  cmpLoad(); cmpSel = cmpSel.filter(x => anyGraded(x) || RAW[x]); cmpSave();
+  cosMsg = "Removing…"; route();
+  try {
+    const idx = (await ghGetJSON("raw/index.json")) || {tickers: {}};
+    let shared = false;
+    for (const x of all) {
+      if (await ghDelete(`raw/${x}.json`, `Phone: remove ${x}`)) shared = true;
+      if (idx.tickers) delete idx.tickers[x];
+    }
+    if (shared) await ghPut("raw/index.json", JSON.stringify(idx, null, 1), `Phone: remove ${all.join(", ")}`);
+    cosMsg = `Removed ${all.join(", ")}${shared ? " here and for the PC" : " from this phone"}.`;
+  } catch (e) { cosMsg = `Removed from this phone; not from GitHub: ${e.message}`; }
+  route();
+}
+function clearPrices() {
+  LS.set("tarsier.px", {}); Object.keys(pxFailed).forEach(k => delete pxFailed[k]);
+  pxMsg = "Saved prices cleared: the next page you open fetches them again."; route();
+}
+async function reloadApp() {
+  try {                                             // keep the Python runtime: it does not change
+    for (const k of await caches.keys()) {
+      const c = await caches.open(k);
+      for (const r of await c.keys()) if (!/\/py\/(pyodide|wheels)\//.test(r.url)) await c.delete(r);
+    }
+  } catch (e) {}
+  location.reload();
+}
+function settingsPage() {
   const has = !!LS.get("tarsier.token", "");
-  return `<div class="card set"><div class="h">Phone settings</div>
-    <p class="small">To share what you look up on the phone with the PC, paste the same GitHub token the PC uses. It stays on this phone only.</p>
+  const looked = Object.values(RAW).filter(r => r && r.ticker).sort((a, b) => (b.fetched || "").localeCompare(a.fetched || ""));
+  const npx = Object.keys(PX()).length;
+  setTimeout(async () => { const e = document.getElementById("engst"); if (!e) return;
+    const st = await engineState();
+    e.textContent = st == "ready" ? "Loaded and ready." : st == "saved" ? "Downloaded: kept on this phone." : "Not downloaded yet (about 14 MB, it downloads at the first grade).";
+    const b = document.getElementById("engbtn"); if (b && st != "none") b.style.display = "none"; }, 0);
+  return `<div class="card set"><div class="h">Sync with the PC</div>
+    <p class="small">To share what you look up on the phone with the PC, paste a GitHub token that can write to the tarsier repository. It stays on this phone only.</p>
     <input id="tok" type="password" placeholder="${has ? "Token saved · paste a new one to replace it" : "github_pat_…"}" autocomplete="off">
     <div class="row2"><button onclick="saveToken(document.getElementById('tok').value)">Save token</button>
       <button onclick="testSync()" style="background:var(--soft);color:var(--navy)">Check connection</button>
       ${has ? `<button onclick="saveToken('')" style="background:var(--soft);color:var(--bad)">Remove</button>` : ""}</div>
-    ${setMsg ? `<p class="note">${esc(setMsg)}</p>` : ""}</div>`;
+    ${setMsg ? `<p class="note">${esc(setMsg)}</p>` : ""}</div>
+  <div class="card set"><div class="h">Grading engine</div>
+    <p class="small">The phone grades new companies with the same engine as the PC. <span id="engst" class="muted">Checking…</span></p>
+    <div class="row2"><button id="engbtn" onclick="getEngine()">Download now</button></div>
+    ${engMsg ? `<p class="note">${esc(engMsg)}</p>` : ""}</div>
+  <div class="card set"><div class="h">Looked up on this phone · ${looked.length}</div>
+    ${looked.length ? `<table class="looked">${looked.map(r => { const c = r.company, g = c && c.latest;
+      return `<tr><td><b>${esc(r.ticker)}</b> <span class="tiny muted">${esc((r.fetched || "").slice(0, 10))}</span></td>
+        <td>${g ? `<span class="chip" style="background:${gcol(g.grade)};color:#fff">${esc(g.grade)}</span>` : `<span class="tiny muted">raw only</span>`}${graded(r.ticker) ? ` <span class="tiny muted">graded on the PC</span>` : ""}</td>
+        <td style="text-align:right"><button class="x" onclick="removeLooked('${esc(r.ticker)}')" aria-label="Remove ${esc(r.ticker)}">✕</button></td></tr>`; }).join("")}</table>
+      <div class="row2" style="margin-top:8px"><button onclick="removeLooked()" style="background:var(--soft);color:var(--bad)">Remove all</button></div>`
+      : `<p class="small muted">None yet. In Research or Compare, type any US ticker and tap Get &amp; grade.</p>`}
+    <p class="note">Removing one also removes it from GitHub, so the PC stops grading it at Sync. Companies the PC graded stay on the PC.</p>
+    ${cosMsg ? `<p class="note">${esc(cosMsg)}</p>` : ""}</div>
+  <div class="card set"><div class="h">Live prices</div>
+    <p class="small">From Yahoo Finance through your relay, kept 15 minutes. ${npx} saved now.</p>
+    <div class="row2"><button onclick="clearPrices()" style="background:var(--soft);color:var(--navy)">Refresh all prices</button></div>
+    ${pxMsg ? `<p class="note">${esc(pxMsg)}</p>` : ""}</div>
+  <div class="card set"><div class="h">App</div>
+    <p class="small">Grades from the PC: ${D ? esc(D.generated) : "none yet"}<br>Tarsier Research ${D ? "v" + esc(D.version) + " · method " + esc(D.method) : ""}</p>
+    <div class="row2"><button onclick="reloadApp()" style="background:var(--soft);color:var(--navy)">Reload the app</button></div>
+    <p class="note">After a change on GitHub, Reload gets the newest version (the engine download is kept).</p></div>`;
 }
 
 function method() {
   const g = D ? D.grades : [];
-  return `${settingsCard()}<div class="card"><div class="h">What Tarsier does</div>
+  return `<div class="card"><div class="h">What Tarsier does</div>
     <p>Every quarter a company reports to the SEC. Tarsier reads the filing, compares the quarter with the same quarter a year earlier, and grades it from <b>A+</b> to <b>F</b>.</p>
     <p class="small muted">See past the headlines: one grade, and the reasons behind it.</p></div>
   <div class="card"><div class="h">Five blocks</div><table>
@@ -809,13 +895,15 @@ function route() {
   const h = location.hash || "#/";
   const m = h.match(/^#\/c\/([A-Z0-9.\-]+)/i);
   $("#hd").classList.toggle("has-back", !!m);
-  ["n-w", "n-c", "n-p", "n-m"].forEach(id => $("#" + id).classList.remove("on"));
+  ["n-w", "n-c", "n-p", "n-m", "n-s"].forEach(id => $("#" + id).classList.remove("on"));
   let html;
-  if (!D) html = `<div class="empty">No data yet.<br>Press Publish to phone in Tarsier on your PC.</div>`;
+  if (h.startsWith("#/settings")) { html = settingsPage(); $("#n-s").classList.add("on"); }
+  else if (!D) html = `<div class="empty">No data yet.<br>Press Publish to phone in Tarsier on your PC.</div>`;
   else if (m) { html = company(m[1].toUpperCase()); $("#n-w").classList.add("on"); }
   else if (h.startsWith("#/compare")) { html = comparePage(); $("#n-c").classList.add("on"); }
   else if (h.startsWith("#/portfolio")) { html = portfolio(); $("#n-p").classList.add("on"); }
   else if (h.startsWith("#/method")) { html = method(); $("#n-m").classList.add("on"); }
+  else if (h.startsWith("#/settings")) { html = settingsPage(); $("#n-s").classList.add("on"); }
   else { html = research(); $("#n-w").classList.add("on"); }
   $("#app").innerHTML = html;
   if (!m) window.scrollTo(0, 0);
