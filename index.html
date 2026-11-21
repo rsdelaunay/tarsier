@@ -79,6 +79,27 @@ nav a.on svg{stroke:var(--navy)}
 .bubble li,.ptr li{margin:3px 0}
 .ptr{margin-top:12px;font-size:13px}
 .ptr .pt{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--navy);text-transform:uppercase;margin-bottom:4px}
+.cmpbtn{margin-top:10px;width:100%;border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:9px;font:600 13px inherit;color:var(--navy)}
+.cmp-sel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.cmp-sel span{display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;border-radius:999px;padding:5px 6px 5px 11px;font-weight:700;font-size:13px}
+.cmp-sel span button{border:0;background:rgba(255,255,255,.18);color:#fff;border-radius:999px;width:20px;height:20px;font-size:12px;line-height:20px;padding:0}
+.cmp-pick{display:flex;gap:8px}
+.cmp-pick select{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:8px;font:14px inherit;background:#fff;color:var(--ink)}
+.cmp-wrap{overflow-x:auto;margin:0 -14px;padding:0 14px}
+table.cmp{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+table.cmp th,table.cmp td{padding:6px 6px;border-top:1px solid var(--line);white-space:nowrap;text-align:right}
+table.cmp th:first-child,table.cmp td:first-child{position:sticky;left:0;background:#fff;text-align:left;z-index:1;
+  white-space:normal;min-width:118px;max-width:132px;padding-left:0;box-shadow:1px 0 0 var(--line)}
+table.cmp thead th{border-top:0;vertical-align:bottom;font-size:13px;color:var(--ink);letter-spacing:0}
+table.cmp thead .badge{width:30px;height:30px;font-size:13px;border-radius:7px;margin-bottom:3px}
+table.cmp tr.sec td,table.cmp tr.hlp td{position:static;max-width:none;min-width:0;box-shadow:none;background:transparent;text-align:left;white-space:normal}
+table.cmp tr.sec td{border-top:0;padding-top:14px;font-size:10px;font-weight:700;letter-spacing:.5px;color:var(--navy);text-transform:uppercase}
+table.cmp .stk{position:sticky;left:0;display:inline-block;max-width:330px}
+table.cmp tr.row td:first-child{font-size:12.5px;line-height:1.3}
+table.cmp td.best{background:#E3F3E6;color:var(--ok);font-weight:700}
+table.cmp tr.row td:first-child{cursor:pointer}
+table.cmp tr.hlp td{border-top:0;padding-top:0;color:var(--muted);font-size:11.5px}
+table.cmp .arr{color:var(--muted);font-size:11px}
 .blk .line{padding:5px 0 5px 10px;border-left:3px solid var(--line);margin:5px 0;font-size:13px}
 .up{color:var(--ok)}.down{color:var(--bad)}
 .hero{display:flex;gap:14px;align-items:center}
@@ -151,6 +172,7 @@ p{margin:6px 0}
 <main id="app"><div class="empty">Loading…</div></main>
 <nav>
   <a href="#/" id="n-w"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>Research</a>
+  <a href="#/compare" id="n-c"><svg viewBox="0 0 24 24"><path d="M5 20V9M12 20V4M19 20v-8"/></svg>Compare</a>
   <a href="#/portfolio" id="n-p"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 5"/></svg>Portfolio</a>
   <a href="#/method" id="n-m"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Method</a>
 </nav>
@@ -310,6 +332,94 @@ function gradeCard(q) {
     ${q.house_rules ? `<p class="note">House rule: ${esc(q.house_rules)}</p>` : ""}</div>`;
 }
 
+let cmpSel = null;
+function cmpLoad() {
+  if (cmpSel) return;
+  try { cmpSel = JSON.parse(localStorage.getItem("tarsier.compare") || "null"); } catch (e) { cmpSel = null; }
+  const have = new Set(D.companies.filter(c => c.compare).map(c => c.ticker));
+  cmpSel = (Array.isArray(cmpSel) ? cmpSel : []).filter(t => have.has(t)).slice(0, 5);
+  if (!cmpSel.length) cmpSel = [...D.companies].filter(c => c.compare)
+    .sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0)).slice(0, 3).map(c => c.ticker);
+}
+function cmpSave() { try { localStorage.setItem("tarsier.compare", JSON.stringify(cmpSel)); } catch (e) {} }
+function cmpAdd(t) { cmpLoad(); if (t && !cmpSel.includes(t) && cmpSel.length < 5) cmpSel.push(t); cmpSave(); route(); }
+function cmpDel(t) { cmpSel = cmpSel.filter(x => x != t); cmpSave(); route(); }
+function cmpSector(s) {
+  if (!s) return;
+  cmpSel = D.companies.filter(c => c.compare && (c.sector || "Other") == s)
+    .sort((a, b) => (b.latest.score || 0) - (a.latest.score || 0)).slice(0, 5).map(c => c.ticker);
+  cmpSave(); route();
+}
+function cmpWith(t) { cmpLoad(); if (!cmpSel.includes(t)) { if (cmpSel.length >= 5) cmpSel.pop(); cmpSel.unshift(t); } cmpSave(); location.hash = "#/compare"; }
+
+function cfmt(kind, v) {
+  if (v == null) return "—";
+  if (kind == "grade") return `${esc(v[0] || "—")} ${v[1] != null ? v[1].toFixed(1) : ""}`;
+  if (kind == "text") return esc(v);
+  if (kind == "money") { const a = Math.abs(v); return (v < 0 ? "−" : "") + (a >= 1e3 ? "$" + (a / 1e3).toLocaleString("en-US", {minimumFractionDigits: 1, maximumFractionDigits: 1}) + "B" : "$" + Math.round(a).toLocaleString("en-US") + "M"); }
+  if (kind == "usd") return usd(v);
+  if (kind == "eps") return (v < 0 ? "−" : "") + "$" + Math.abs(v).toFixed(2);
+  if (kind == "pct") return v.toFixed(1) + "%";
+  if (kind == "pct+") return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%";
+  if (kind == "x") return v.toFixed(1) + "×";
+  if (kind == "x2") return v.toFixed(2);
+  return esc(v);
+}
+function cbest(cols, key, kind, better) {
+  if (!better) return -1;
+  const vals = cols.map((c, i) => {
+    let v = c[key];
+    if (v == null) return null;
+    if (kind == "grade") v = v[1];
+    if (typeof v != "number") return null;
+    if (["pe", "fpe", "peg", "ev_sales", "ev_ebitda"].includes(key) && v <= 0) return null;
+    return [i, v];
+  }).filter(Boolean);
+  if (vals.length < 2) return -1;
+  const pick = vals.reduce((a, b) => (better == "high" ? b[1] > a[1] : b[1] < a[1]) ? b : a);
+  return vals.filter(x => x[1] == pick[1]).length > 1 ? -1 : pick[0];
+}
+
+function comparePage() {
+  if (!D || !D.compare_rows) return `<div class="empty">Publish again from the PC to use Compare.</div>`;
+  cmpLoad();
+  const cs = cmpSel.map(t => D.companies.find(c => c.ticker == t)).filter(Boolean);
+  const cols = cs.map(c => c.compare);
+  const free = D.companies.filter(c => c.compare && !cmpSel.includes(c.ticker)).map(c => c.ticker).sort();
+  const count = {};
+  D.companies.forEach(c => { if (c.compare) { const k = c.sector || "Other"; count[k] = (count[k] || 0) + 1; } });
+  let html = `<div class="card"><div class="h">Compare <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· up to five · best in green</span></div>
+    <div class="cmp-sel">${cs.map(c => `<span>${esc(c.ticker)}<button onclick="cmpDel('${c.ticker}')" aria-label="Remove">✕</button></span>`).join("")}</div>
+    <div class="cmp-pick">
+      <select onchange="cmpAdd(this.value)" ${cmpSel.length >= 5 ? "disabled" : ""}><option value="">+ Add company</option>${free.map(t => `<option>${esc(t)}</option>`).join("")}</select>
+      <select onchange="cmpSector(this.value)"><option value="">Fill with a sector</option>${Object.keys(count).sort((a, b) => count[b] - count[a]).map(k => `<option value="${esc(k)}">${esc(k)} (${count[k]})</option>`).join("")}</select>
+    </div></div>`;
+  if (!cols.length) return html + `<div class="empty">Add companies to compare.</div>`;
+  const fy = [...new Set(cols.map(c => c.fwd_year).filter(Boolean))];
+  let rows = "", sec = null;
+  D.compare_rows.forEach((r, n) => {
+    if (r.key == "business" && cols.every(c => !c.business || c.business == "—")) return;
+    if (r.section != sec) { sec = r.section; rows += `<tr class="sec"><td colspan="${cols.length + 1}"><div class="stk">${esc(sec)}</div></td></tr>`; }
+    const b = cbest(cols, r.key, r.kind, r.better);
+    let label = r.label;
+    if (r.key == "fpe" && fy.length == 1) label = `Forward P/E (${fy[0].replace("E", "")})`;
+    const arr = r.better == "high" ? "\u00a0↑" : r.better == "low" ? "\u00a0↓" : "";
+    const help = (r.help || "") + (r.better ? (r.help ? " " : "") + (r.better == "high" ? "Higher is better." : "Lower is better.") : "");
+    rows += `<tr class="row"${help ? ` onclick="const h=this.nextElementSibling;h.style.display=h.style.display=='table-row'?'none':'table-row'"` : ""}>
+      <td>${esc(label)}<span class="arr">${arr}</span></td>${cols.map((c, i) => {
+        let t = cfmt(r.kind, c[r.key]);
+        if (r.key == "fpe" && fy.length > 1 && c.fwd_year && c[r.key] != null) t += ` <span class="arr">${esc(c.fwd_year.replace("FY", "").replace("E", ""))}</span>`;
+        return `<td class="${i == b ? "best" : ""}">${t}</td>`; }).join("")}</tr>
+      ${help ? `<tr class="hlp" style="display:none"><td colspan="${cols.length + 1}"><div class="stk">${esc(help)}</div></td></tr>` : ""}`;
+  });
+  const src = [...new Set(cols.map(c => c.price_source).filter(Boolean))];
+  html += `<div class="card"><div class="cmp-wrap"><table class="cmp"><thead><tr><th></th>${cs.map(c => `<th onclick="location.hash='#/c/${c.ticker}'">
+      <div class="badge" style="background:${gcol(c.latest.grade)}">${esc(c.latest.grade || "—")}</div><div>${esc(c.ticker)}</div></th>`).join("")}</tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <p class="note">${src.length ? "Prices: " + esc(src.join("; ")) + "." : "No market prices in this publish."} Tap a row name for how it is worked out; tap a ticker to open it.</p></div>`;
+  return html;
+}
+
 function pickQ(i) { selQ = i; const y = window.scrollY; route(); window.scrollTo(0, y); }
 
 function quarters(c) {
@@ -352,7 +462,8 @@ function company(t) {
       <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
       <div><div class="t">${esc(c.ticker)}</div><div class="small muted">${esc(c.name)}</div>
       <div class="small">${esc(q.label)} · <b>${q.score ?? "n/a"}</b> / 100 ${chips(q)}</div></div></div>
-      <div class="facts">${facts.map(s => `<span>${esc(s)}</span>`).join("")}</div></div>`;
+      <div class="facts">${facts.map(s => `<span>${esc(s)}</span>`).join("")}</div>
+      ${c.compare ? `<button class="cmpbtn" onclick="cmpWith('${c.ticker}')">Compare with others →</button>` : ""}</div>`;
 
   html += quarters(c);
 
@@ -452,10 +563,11 @@ function route() {
   const h = location.hash || "#/";
   const m = h.match(/^#\/c\/([A-Z0-9.\-]+)/i);
   $("#hd").classList.toggle("has-back", !!m);
-  ["n-w", "n-p", "n-m"].forEach(id => $("#" + id).classList.remove("on"));
+  ["n-w", "n-c", "n-p", "n-m"].forEach(id => $("#" + id).classList.remove("on"));
   let html;
   if (!D) html = `<div class="empty">No data yet.<br>Press Publish to phone in Tarsier on your PC.</div>`;
   else if (m) { html = company(m[1].toUpperCase()); $("#n-w").classList.add("on"); }
+  else if (h.startsWith("#/compare")) { html = comparePage(); $("#n-c").classList.add("on"); }
   else if (h.startsWith("#/portfolio")) { html = portfolio(); $("#n-p").classList.add("on"); }
   else if (h.startsWith("#/method")) { html = method(); $("#n-m").classList.add("on"); }
   else { html = research(); $("#n-w").classList.add("on"); }
