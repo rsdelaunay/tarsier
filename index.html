@@ -767,7 +767,7 @@ function company(t) {
     const fv = alt ? M.fair_value : v.fair_value, up = alt ? M.upside : v.upside, er = alt ? M.expected_return : v.expected_return;
     const tg = s => alt ? M.targets[s] : v.scenarios[s].targets, wt = alt ? M.weighted_targets : v.weighted_targets;
     const risks = (v.holder_risks || []).filter(x => !(q.holder_risks || []).some(y => y.head == x.head) && x.head != "This valuation ignores stock pay");
-    if (M && M.note) risks.unshift({level: "watch", head: "This valuation ignores stock pay", text: M.note});
+    const spTip = M && M.note ? tipI("sp-" + c.ticker, "This valuation ignores stock pay: " + M.note + ".") : "";
     const picker = ms.length > 1 ? `<div class="mpick">
         <button class="mchip${M.code == sug.code ? " on" : ""}" onclick="pickMethod('${c.ticker}','${sug.code}')">${M.code == sug.code ? "✓ " : ""}Suggested: ${esc(sug.short)}</button>
         <select class="msel${M.code != sug.code ? " alt" : ""}" onchange="pickMethod('${c.ticker}', this.value)">
@@ -776,7 +776,7 @@ function company(t) {
         </select></div>
       ${v.business_model ? `<p class="tiny muted" style="margin:4px 0 0">Business model: ${esc(v.business_model)}${M.code != sug.code ? " · your choice, on this phone only" : ""}</p>` : ""}` : "";
     html += `<div class="card"><div class="h">Fair value · after a ${v.margin_of_safety}% margin of safety</div>${picker}
-      <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""}</div><div class="v">${usd(fv)}</div>
+      <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""} ${spTip}</div><div class="v">${usd(fv)}</div>
         <div class="tiny ${up == null ? "muted" : up >= 0 ? "up" : "down"}">${up == null ? "no price saved" : pct(up, 1) + " vs " + usd(v.price)}</div></div>
         <div><div class="k">BY FREE CASH FLOW</div><div class="v">${usd(v.dcf_value)}</div>
         <div class="tiny ${v.dcf_upside == null ? "muted" : v.dcf_upside >= 0 ? "up" : "down"}">${v.dcf_upside == null ? "cross-check" : pct(v.dcf_upside, 1) + " vs price"}</div></div></div>
@@ -1012,16 +1012,21 @@ function driversBox(c, v, d, M) {
   const all = [0, 1, 2, 3, 4], tg = d.targets_at;
   const basis = (D.basis.find(Boolean) || (M && M.short) || "");
   const edited = hasEdits(t);
-  return `<div class="drv"><div class="dh"><b>What the targets rest on</b>
+  const what = {"P/E": "EPS", "P/S": "revenue", "EV/Sales": "revenue", "EV/EBITDA": "EBITDA", "P/FFO": "FFO",
+                "P/D": "dividend", "P/TBV": "tangible book", "P/B": "book"}[basis] || "figure";
+  const help = `The target at the end of each year = the next year's ${what} × the ${basis} multiple of that year`
+    + (/^EV/.test(basis) ? ", plus net cash, per share" : "") + `. The weighted target mixes the three scenarios by their weights; brought back to today at your required return and less the margin of safety, it gives the fair value. `
+    + (canEdit ? "Tap a number to change it (blue = yours); empty it to go back to Tarsier's. Changes stay on this phone." : "Sync from the PC to edit these here.");
+  return `<div class="drv"><div class="dh"><b>What the targets rest on ${tipI("drv-" + t, help)}</b>
       <span class="ptabs">${["bear", "base", "bull"].map(x => `<button class="${x == s ? "on" : ""}" onclick="pTab('${t}','${x}')">${x[0].toUpperCase() + x.slice(1)} ${v.weights[x]}%</button>`).join("")}</span></div>
     <table class="pt"><tr><th></th>${yl.map(y => `<th>${y}</th>`).join("")}</tr>
       ${row("Revenue growth %", "rev_growth", true, all)}
       ${row("EPS growth %", "eps_growth", true, all)}
       <tr class="calc"><td>EPS</td>${D.eps.map(x => `<td>${x == null ? "—" : "$" + x.toFixed(2)}</td>`).join("")}</tr>
-      ${row(`Multiple · ${esc(basis)}`, "multiple", false, tg)}
+      ${/sales|revenue/i.test(what) ? `<tr class="calc"><td>Revenue $B</td>${D.revenue.map(x => `<td>${x == null ? "—" : x.toFixed(1)}</td>`).join("")}</tr>` : ""}
+      ${row(`${esc(basis || "Multiple")} ×`, "multiple", false, tg)}
       <tr class="w"><td>Target, year end</td>${fys.map((_, y) => `<td>${tg.includes(y) && D.target[y] != null ? "$" + Math.round(D.target[y]).toLocaleString("en-US") : ""}</td>`).join("")}</tr>
     </table>
-    <p class="tiny muted" style="margin:6px 0 0">The target at the end of each year = the next year's ${basis == "P/E" ? "EPS" : esc(basis).replace(/^.*\//, "").toLowerCase() || "figure"} × that multiple. ${canEdit ? `Tap a number to change it (blue = yours); empty it to go back to Tarsier's. Changes stay on this phone.` : `Sync from the PC to edit these here.`}</p>
     ${PBUSY[t] ? `<p class="note">${esc(PBUSY[t])}</p>` : ""}${PERR[t] ? `<p class="note" style="color:var(--bad)">${esc(PERR[t])}</p>` : ""}
     ${edited ? `<button class="pbtn" onclick="pReset('${t}')">↺ Back to Tarsier's projection</button>` : ""}</div>`;
 }
@@ -1342,15 +1347,6 @@ function settingsPage() {
     <div class="row2"><button onclick="savePass(document.getElementById('ppw').value)">Save passphrase</button>
       ${LS.get("tarsier.pass", "") ? `<button onclick="savePass('')" style="background:var(--soft);color:var(--bad)">Remove</button>` : ""}</div>
     ${privMsg ? `<p class="note">${esc(privMsg)}</p>` : ""}</div>
-  <div class="card set"><div class="h">Looked up on this phone · ${looked.length}</div>
-    ${looked.length ? `<table class="looked">${looked.map(r => { const c = r.company, g = c && c.latest;
-      return `<tr><td><b>${esc(r.ticker)}</b> <span class="tiny muted">${esc((r.fetched || "").slice(0, 10))}</span></td>
-        <td>${g ? `<span class="chip" style="background:${gcol(g.grade)};color:#fff">${esc(g.grade)}</span>` : `<span class="tiny muted">raw only</span>`}${graded(r.ticker) ? ` <span class="tiny muted">graded on the PC</span>` : ""}</td>
-        <td style="text-align:right"><button class="x" onclick="removeLooked('${esc(r.ticker)}')" aria-label="Remove ${esc(r.ticker)}">✕</button></td></tr>`; }).join("")}</table>
-      <div class="row2" style="margin-top:8px"><button onclick="removeLooked()" style="background:var(--soft);color:var(--bad)">Remove all</button></div>`
-      : `<p class="small muted">None yet. In Research or Compare, type any US ticker and tap Get &amp; grade.</p>`}
-    <p class="note">Removing one also removes it from GitHub, so the PC stops grading it at Sync. Companies the PC graded stay on the PC.</p>
-    ${cosMsg ? `<p class="note">${esc(cosMsg)}</p>` : ""}</div>
   <div class="card set"><div class="h">Live prices</div>
     <p class="small">From Yahoo Finance through your relay, kept 15 minutes. ${npx} saved now.</p>
     <div class="row2"><button onclick="clearPrices()" style="background:var(--soft);color:var(--navy)">Refresh all prices</button></div>
@@ -1376,6 +1372,9 @@ function mxFmt(v, how) {
   if (how == "pct_signed") return (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
   if (how == "people") return v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : Math.round(v / 1e3) + "K";
   return how == "rate" ? v.toFixed(2) + "%" : v.toFixed(1) + "%";
+}
+function tipI(key, text) {
+  return `<span class="mx-i" onclick="event.stopPropagation();mxOpen=mxOpen=='${key}'?null:'${key}';route()">ⓘ</span>${mxOpen == key ? `<div class="mx-tip" style="font-weight:400;text-transform:none;letter-spacing:0">${esc(text)}</div>` : ""}`;
 }
 function mxTip(key) {
   const X = D.macro, t = X.terms && X.terms[key];
@@ -1493,6 +1492,23 @@ function method() {
     <p><span class="chip prov">PROVISIONAL</span> fewer than 3 of the 5 Execution inputs: the grade rests on the filing alone.</p>
     <p><span class="chip pre">PRELIMINARY</span> graded from the earnings press release, before the 10-Q reached the SEC.</p>
     <p><span class="chip nc">NOT COMPARABLE</span> banks, lenders and insurers: the scorecard does not fit them yet.</p></div>
+  <div class="card"><div class="h">Portfolio · the structure behind the warnings</div>
+    ${(() => { const R = (D.portfolio || {}).rules; if (!R) return `<p class="small muted">Sync the portfolio from the PC to see your rules here.</p>`;
+      const p = x => Math.round(x * 100) + "%";
+      return pointers([
+        `Position caps by conviction: high ${p(R.caps["High conviction"])}, conviction ${p(R.caps.Conviction)}, gamble ${p(R.caps.Gamble)}; no conviction set: ${p(R.caps[R.default])}`,
+        `Cash ${p(R.cash_min)}–${p(R.cash_max)}: the top with QQQ and the S&P 500 at their highs, the bottom after a 20% correction, when you buy`,
+        `No sector above ${p(R.sector_max)}; gambles together at most ${p(R.gambles_max)}`,
+        `Value and dividend at least ${p(R.defensive_min)}: a counterweight to growth`,
+        `A holding graded ${[...new Set(R.weak.map(g => g.replace("-", "−")))].join(", ")} last quarter: re-read the thesis`,
+        `This month's money: cash to its target first, then value/dividend while short, then the holdings 20%+ under their 52-week high; whole shares, never past a cap`]); })()}
+    <p class="note">A warning appears when a rule is broken: red is far off, yellow is to watch.</p></div>
+  <div class="card"><div class="h">Macro</div>
+    ${pointers([
+      "The US economy at a glance, from the Federal Reserve's FRED data: growth (GDP), jobs, inflation (CPI, PCE, PPI) and the Fed's rate",
+      "One grade for the economy: growth 20%, jobs 40%, inflation 40%; hot inflation pulls it down hard, because it brings rate hikes",
+      "What the market expects from the next Fed meetings, read from fed funds futures",
+      "Why it matters: rates and inflation move what investors pay for growth, so it frames the cash rule and the multiples"])}</div>
   <div class="card"><div class="h">Fair value</div><p class="small">Three scenarios (bear, base, bull) for the next five years give price targets; weighted and brought back to today, after a margin of safety, they give the fair value. A free cash flow valuation at the sector's cost of capital is the cross-check.</p></div>
   <p class="note" style="text-align:center">Tarsier Research ${D ? "v" + esc(D.version) + " · method " + esc(D.method) : ""}<br>Educational analysis, not investment advice.</p>`;
 }
