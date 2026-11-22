@@ -52,6 +52,15 @@ nav a.on svg{stroke:var(--navy)}
 .moin input{display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:8px;font:inherit;font-size:15px;border:1.5px solid #E0C46A;border-radius:8px;background:#FFF6D6;text-align:right}
 table.mo{width:100%;border-collapse:collapse}table.mo td,table.mo th{padding:6px 4px;border-bottom:1px solid #EEF1F5;vertical-align:top;font-size:13px}
 table.mo .r{text-align:right;white-space:nowrap}table.mo tr.moy td{background:#FFF8D6;color:#3D3300}table.mo tr.mot td{border-bottom:0;border-top:1.5px solid #D9DEE5}
+.drv{margin-top:12px;padding-top:10px;border-top:1px solid #EEF1F5}.drv .dh{display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}
+.ptabs button{font:600 11px inherit;font-family:inherit;padding:5px 8px;border:1px solid #D9DEE5;background:#fff;color:#5B6675;border-radius:6px;margin-left:3px}
+.ptabs button.on{background:#1B2A41;color:#fff;border-color:#1B2A41}
+table.pt{width:100%;border-collapse:collapse;margin-top:6px;table-layout:fixed}table.pt th,table.pt td{padding:3px 2px;font-size:12px;text-align:right}
+table.pt th:first-child,table.pt td:first-child{text-align:left;width:31%;color:#5B6675;font-size:11.5px}
+table.pt tr.calc td{color:#5B6675}table.pt tr.w td{font-weight:700;border-top:1px solid #EEF1F5}
+.pbtn{margin-top:8px;font:600 12px inherit;font-family:inherit;padding:7px 12px;border-radius:8px;border:1.5px solid #1B2A41;background:#fff;color:#1B2A41}
+.pin{width:100%;box-sizing:border-box;padding:5px 3px;border:1px solid #E3E7ED;border-radius:6px;background:#FAFBFC;font:inherit;font-size:12px;text-align:right;color:#1B2A41}
+.pin.typed{color:#1F5FD6;font-weight:700;border-color:#9DB9EC;background:#F1F6FF}
 .mpick{display:flex;gap:8px;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
 .mchip{font:700 12px/1 inherit;font-family:inherit;padding:7px 10px;border-radius:999px;border:1.5px solid var(--navy,#1B2A41);background:#fff;color:var(--navy,#1B2A41)}
 .mchip.on{background:#E3F1E6;border-color:#1E7B34;color:#1E7B34}
@@ -726,7 +735,10 @@ function company(t) {
   const c = allCos().find(x => x.ticker == t);
   if (!c) return `<div class="empty">Not found.</div>`;
   if (selT != t) { selT = t; selQ = null; }
-  const q = c.latest, f = q.fcf, v = c.valuation, u = q.uses || {};
+  const q = c.latest, f = q.fcf, u = q.uses || {};
+  const v = PRES[c.ticker] || c.valuation;                    // reworked on this phone, else the PC's
+  if (c.valuation && c.valuation.engine && hasEdits(c.ticker) && !PRES[c.ticker] && !PBUSY[c.ticker] && !PERR[c.ticker])
+    setTimeout(() => pRecalc(c.ticker), 0);
   const facts = (q.headline || "").split("·").map(s => s.trim()).filter(Boolean);
   let html = `<div class="card"><div class="hero">
       <div class="badge" style="background:${gcol(q.grade)}">${esc(q.grade || "—")}</div>
@@ -755,7 +767,7 @@ function company(t) {
     const fv = alt ? M.fair_value : v.fair_value, up = alt ? M.upside : v.upside, er = alt ? M.expected_return : v.expected_return;
     const tg = s => alt ? M.targets[s] : v.scenarios[s].targets, wt = alt ? M.weighted_targets : v.weighted_targets;
     const risks = (v.holder_risks || []).filter(x => !(q.holder_risks || []).some(y => y.head == x.head) && x.head != "This valuation ignores stock pay");
-    if (M && M.note) risks.unshift({level: "watch", head: "This valuation ignores stock pay", text: M.note});
+    const spTip = M && M.note ? tipI("sp-" + c.ticker, "This valuation ignores stock pay: " + M.note + ".") : "";
     const picker = ms.length > 1 ? `<div class="mpick">
         <button class="mchip${M.code == sug.code ? " on" : ""}" onclick="pickMethod('${c.ticker}','${sug.code}')">${M.code == sug.code ? "✓ " : ""}Suggested: ${esc(sug.short)}</button>
         <select class="msel${M.code != sug.code ? " alt" : ""}" onchange="pickMethod('${c.ticker}', this.value)">
@@ -764,13 +776,14 @@ function company(t) {
         </select></div>
       ${v.business_model ? `<p class="tiny muted" style="margin:4px 0 0">Business model: ${esc(v.business_model)}${M.code != sug.code ? " · your choice, on this phone only" : ""}</p>` : ""}` : "";
     html += `<div class="card"><div class="h">Fair value · after a ${v.margin_of_safety}% margin of safety</div>${picker}
-      <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""}</div><div class="v">${usd(fv)}</div>
+      <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""} ${spTip}</div><div class="v">${usd(fv)}</div>
         <div class="tiny ${up == null ? "muted" : up >= 0 ? "up" : "down"}">${up == null ? "no price saved" : pct(up, 1) + " vs " + usd(v.price)}</div></div>
         <div><div class="k">BY FREE CASH FLOW</div><div class="v">${usd(v.dcf_value)}</div>
         <div class="tiny ${v.dcf_upside == null ? "muted" : v.dcf_upside >= 0 ? "up" : "down"}">${v.dcf_upside == null ? "cross-check" : pct(v.dcf_upside, 1) + " vs price"}</div></div></div>
       <table><tr><th>Price target</th>${yrs.map(y => `<th>${esc(y.replace("FY", "").replace("E", ""))}</th>`).join("")}</tr>
       ${["bear", "base", "bull"].map(s => `<tr><td>${s[0].toUpperCase() + s.slice(1)} <span class="tiny muted">${v.weights[s]}%</span></td>${tg(s).map(x => `<td>${usd(x)}</td>`).join("")}</tr>`).join("")}
       <tr class="w"><td>Weighted</td>${wt.map(x => `<td>${usd(x)}</td>`).join("")}</tr></table>
+      ${driversBox(c, v, alt ? M.drivers : v.drivers, M)}
       ${riskBox(risks, "Before trusting the target")}
       ${er != null ? `<p class="note">Expected yearly return at today's price: <b>${pct(er, 1)}</b>.</p>` : ""}
       ${alt ? `<p class="note">The points below explain the PC's method (${esc(pc.short)}).</p>` : ""}
@@ -940,7 +953,82 @@ function pickMethod(t, code) {
   const pc = ms.find(m => m.current);
   if (pc && code == pc.code) delete MPICK[t]; else MPICK[t] = code;
   LS.set("tarsier.method", MPICK);
+  if (hasEdits(t)) { delete PRES[t]; pRecalc(t); return; }      // the phone's numbers: rework with the new method
   route();
+}
+
+// ---------- the projection behind the targets, editable on the phone (reworked by the Python engine) ----------
+const PEDIT = LS.get("tarsier.edits", {}), PRES = {}, PBUSY = {}, PERR = {}, PSC = {};
+const hasEdits = t => { const e = PEDIT[t]; return !!(e && (Object.keys(e.scen || {}).length || (e.settings || {}).method)); };
+function pUser(c) {     // the PC's choices, with the phone's edits on top
+  const base = JSON.parse(JSON.stringify(c.valuation.engine.user || {})), e = PEDIT[c.ticker] || {};
+  base.settings = Object.assign(base.settings || {}, e.settings || {});
+  base.scen = base.scen || {};
+  for (const [s, ks] of Object.entries(e.scen || {})) {
+    base.scen[s] = base.scen[s] || {};
+    for (const [k, fys] of Object.entries(ks)) base.scen[s][k] = Object.assign(base.scen[s][k] || {}, fys);
+  }
+  if (MPICK[c.ticker]) base.settings.method = MPICK[c.ticker];
+  return base;
+}
+async function pRecalc(t) {
+  const c = allCos().find(x => x.ticker == t); if (!c || !c.valuation || !c.valuation.engine) return;
+  PBUSY[t] = "Loading the Tarsier engine…"; PERR[t] = ""; route();
+  try {
+    const py = await engine(m => { PBUSY[t] = m.startsWith("Loading") ? "Loading the Tarsier engine (first time: about 14 MB)…" : m; route(); });
+    PBUSY[t] = "Reworking the projection…"; route();
+    await new Promise(r => setTimeout(r, 30));
+    py.globals.set("P_", JSON.stringify({hist: c.valuation.engine.hist, user: pUser(c), price: c.valuation.price,
+      price_source: c.valuation.price_source}));
+    PRES[t] = JSON.parse(py.runPython("phone_engine.revalue(P_)"));
+  } catch (e) { PERR[t] = "Could not rework it: " + (e.message || e).toString().split("\n").slice(-2).join(" "); }
+  PBUSY[t] = ""; route();
+}
+function pEdit(t, s, key, fy, raw, pct_) {
+  const x = String(raw).trim().replace(",", ".").replace("%", "").replace("x", "");
+  const e = PEDIT[t] = PEDIT[t] || {settings: {}, scen: {}};
+  e.scen[s] = e.scen[s] || {}; e.scen[s][key] = e.scen[s][key] || {};
+  if (x === "") delete e.scen[s][key][fy];                       // empty: back to Tarsier's number
+  else { const n = parseFloat(x); if (!isFinite(n)) return route(); e.scen[s][key][fy] = pct_ ? n / 100 : n; }
+  if (!Object.keys(e.scen[s][key]).length) delete e.scen[s][key];
+  if (!Object.keys(e.scen[s]).length) delete e.scen[s];
+  LS.set("tarsier.edits", PEDIT);
+  if (!hasEdits(t)) { delete PRES[t]; route(); return; }
+  pRecalc(t);
+}
+function pReset(t) { delete PEDIT[t]; LS.set("tarsier.edits", PEDIT); delete PRES[t]; PERR[t] = ""; route(); }
+function pTab(t, s) { PSC[t] = s; route(); }
+function driversBox(c, v, d, M) {
+  if (!d || !d.scen) return "";
+  const t = c.ticker, s = PSC[t] || "base", D = d.scen[s], fys = d.labels.map(l => parseInt(l.slice(2, 6)));
+  const yl = d.labels.map(l => "'" + l.slice(4, 6));
+  const canEdit = !!(c.valuation && c.valuation.engine);
+  const cell = (key, y, val, typed, pct_) => canEdit
+    ? `<input class="pin${typed ? " typed" : ""}" inputmode="decimal" value="${val == null ? "" : val}" placeholder="${val == null ? "—" : ""}"
+        onchange="pEdit('${t}','${s}','${key}',${fys[y]},this.value,${pct_})">`
+    : (val == null ? "—" : val + (pct_ ? "%" : "×"));
+  const row = (label, key, pct_, years) => `<tr><td>${label}</td>${fys.map((_, y) => `<td>${years.includes(y)
+    ? cell(key, y, D[key][y], D[key + "_typed"][y], pct_) : ""}</td>`).join("")}</tr>`;
+  const all = [0, 1, 2, 3, 4], tg = d.targets_at;
+  const basis = (D.basis.find(Boolean) || (M && M.short) || "");
+  const edited = hasEdits(t);
+  const what = {"P/E": "EPS", "P/S": "revenue", "EV/Sales": "revenue", "EV/EBITDA": "EBITDA", "P/FFO": "FFO",
+                "P/D": "dividend", "P/TBV": "tangible book", "P/B": "book"}[basis] || "figure";
+  const help = `The target at the end of each year = the next year's ${what} × the ${basis} multiple of that year`
+    + (/^EV/.test(basis) ? ", plus net cash, per share" : "") + `. The weighted target mixes the three scenarios by their weights; brought back to today at your required return and less the margin of safety, it gives the fair value. `
+    + (canEdit ? "Tap a number to change it (blue = yours); empty it to go back to Tarsier's. Changes stay on this phone." : "Sync from the PC to edit these here.");
+  return `<div class="drv"><div class="dh"><b>What the targets rest on ${tipI("drv-" + t, help)}</b>
+      <span class="ptabs">${["bear", "base", "bull"].map(x => `<button class="${x == s ? "on" : ""}" onclick="pTab('${t}','${x}')">${x[0].toUpperCase() + x.slice(1)} ${v.weights[x]}%</button>`).join("")}</span></div>
+    <table class="pt"><tr><th></th>${yl.map(y => `<th>${y}</th>`).join("")}</tr>
+      ${row("Revenue growth %", "rev_growth", true, all)}
+      ${row("EPS growth %", "eps_growth", true, all)}
+      <tr class="calc"><td>EPS</td>${D.eps.map(x => `<td>${x == null ? "—" : "$" + x.toFixed(2)}</td>`).join("")}</tr>
+      ${/sales|revenue/i.test(what) ? `<tr class="calc"><td>Revenue $B</td>${D.revenue.map(x => `<td>${x == null ? "—" : x.toFixed(1)}</td>`).join("")}</tr>` : ""}
+      ${row(`${esc(basis || "Multiple")} ×`, "multiple", false, tg)}
+      <tr class="w"><td>Target, year end</td>${fys.map((_, y) => `<td>${tg.includes(y) && D.target[y] != null ? "$" + Math.round(D.target[y]).toLocaleString("en-US") : ""}</td>`).join("")}</tr>
+    </table>
+    ${PBUSY[t] ? `<p class="note">${esc(PBUSY[t])}</p>` : ""}${PERR[t] ? `<p class="note" style="color:var(--bad)">${esc(PERR[t])}</p>` : ""}
+    ${edited ? `<button class="pbtn" onclick="pReset('${t}')">↺ Back to Tarsier's projection</button>` : ""}</div>`;
 }
 
 function riskBox(list, title) {
@@ -1183,10 +1271,11 @@ function portfolio() {
   const mk = list => { const order = list.map(([n]) => n).filter(n => n != "Other" && n != "Not classified");
     return n => n == "Other" ? "#AEB6C1" : n == "Not classified" ? "#D5DAE1" : (STY[n] && list === p.style ? STY[n] : SLOTS[order.indexOf(n) % SLOTS.length]); };
   setTimeout(loadMarket, 0);
-  return `${marketCard()}${warningsBox(p)}${monthCard(p)}`+`<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
+  return `<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
     <div class="card"><div class="h">By sector</div>${donut(fold(p.sector), mk(p.sector))}</div>
     <div class="card"><div class="h">By style</div>${donut(p.style, mk(p.style))}</div>
-    <p class="note" style="text-align:center">Shares of the money invested. Amounts stay on the PC.</p>`;
+    <p class="note" style="text-align:center">Shares of the portfolio's value at the PC's last Sync. Amounts never leave the PC unlocked.</p>
+    ${marketCard()}${warningsBox(p)}${monthCard(p)}`;
 }
 
 function saveToken(v) {
@@ -1258,15 +1347,6 @@ function settingsPage() {
     <div class="row2"><button onclick="savePass(document.getElementById('ppw').value)">Save passphrase</button>
       ${LS.get("tarsier.pass", "") ? `<button onclick="savePass('')" style="background:var(--soft);color:var(--bad)">Remove</button>` : ""}</div>
     ${privMsg ? `<p class="note">${esc(privMsg)}</p>` : ""}</div>
-  <div class="card set"><div class="h">Looked up on this phone · ${looked.length}</div>
-    ${looked.length ? `<table class="looked">${looked.map(r => { const c = r.company, g = c && c.latest;
-      return `<tr><td><b>${esc(r.ticker)}</b> <span class="tiny muted">${esc((r.fetched || "").slice(0, 10))}</span></td>
-        <td>${g ? `<span class="chip" style="background:${gcol(g.grade)};color:#fff">${esc(g.grade)}</span>` : `<span class="tiny muted">raw only</span>`}${graded(r.ticker) ? ` <span class="tiny muted">graded on the PC</span>` : ""}</td>
-        <td style="text-align:right"><button class="x" onclick="removeLooked('${esc(r.ticker)}')" aria-label="Remove ${esc(r.ticker)}">✕</button></td></tr>`; }).join("")}</table>
-      <div class="row2" style="margin-top:8px"><button onclick="removeLooked()" style="background:var(--soft);color:var(--bad)">Remove all</button></div>`
-      : `<p class="small muted">None yet. In Research or Compare, type any US ticker and tap Get &amp; grade.</p>`}
-    <p class="note">Removing one also removes it from GitHub, so the PC stops grading it at Sync. Companies the PC graded stay on the PC.</p>
-    ${cosMsg ? `<p class="note">${esc(cosMsg)}</p>` : ""}</div>
   <div class="card set"><div class="h">Live prices</div>
     <p class="small">From Yahoo Finance through your relay, kept 15 minutes. ${npx} saved now.</p>
     <div class="row2"><button onclick="clearPrices()" style="background:var(--soft);color:var(--navy)">Refresh all prices</button></div>
@@ -1292,6 +1372,9 @@ function mxFmt(v, how) {
   if (how == "pct_signed") return (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
   if (how == "people") return v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : Math.round(v / 1e3) + "K";
   return how == "rate" ? v.toFixed(2) + "%" : v.toFixed(1) + "%";
+}
+function tipI(key, text) {
+  return `<span class="mx-i" onclick="event.stopPropagation();mxOpen=mxOpen=='${key}'?null:'${key}';route()">ⓘ</span>${mxOpen == key ? `<div class="mx-tip" style="font-weight:400;text-transform:none;letter-spacing:0">${esc(text)}</div>` : ""}`;
 }
 function mxTip(key) {
   const X = D.macro, t = X.terms && X.terms[key];
@@ -1409,6 +1492,23 @@ function method() {
     <p><span class="chip prov">PROVISIONAL</span> fewer than 3 of the 5 Execution inputs: the grade rests on the filing alone.</p>
     <p><span class="chip pre">PRELIMINARY</span> graded from the earnings press release, before the 10-Q reached the SEC.</p>
     <p><span class="chip nc">NOT COMPARABLE</span> banks, lenders and insurers: the scorecard does not fit them yet.</p></div>
+  <div class="card"><div class="h">Portfolio · the structure behind the warnings</div>
+    ${(() => { const R = (D.portfolio || {}).rules; if (!R) return `<p class="small muted">Sync the portfolio from the PC to see your rules here.</p>`;
+      const p = x => Math.round(x * 100) + "%";
+      return pointers([
+        `Position caps by conviction: high ${p(R.caps["High conviction"])}, conviction ${p(R.caps.Conviction)}, gamble ${p(R.caps.Gamble)}; no conviction set: ${p(R.caps[R.default])}`,
+        `Cash ${p(R.cash_min)}–${p(R.cash_max)}: the top with QQQ and the S&P 500 at their highs, the bottom after a 20% correction, when you buy`,
+        `No sector above ${p(R.sector_max)}; gambles together at most ${p(R.gambles_max)}`,
+        `Value and dividend at least ${p(R.defensive_min)}: a counterweight to growth`,
+        `A holding graded ${[...new Set(R.weak.map(g => g.replace("-", "−")))].join(", ")} last quarter: re-read the thesis`,
+        `This month's money: cash to its target first, then value/dividend while short, then the holdings 20%+ under their 52-week high; whole shares, never past a cap`]); })()}
+    <p class="note">A warning appears when a rule is broken: red is far off, yellow is to watch.</p></div>
+  <div class="card"><div class="h">Macro</div>
+    ${pointers([
+      "The US economy at a glance, from the Federal Reserve's FRED data: growth (GDP), jobs, inflation (CPI, PCE, PPI) and the Fed's rate",
+      "One grade for the economy: growth 20%, jobs 40%, inflation 40%; hot inflation pulls it down hard, because it brings rate hikes",
+      "What the market expects from the next Fed meetings, read from fed funds futures",
+      "Why it matters: rates and inflation move what investors pay for growth, so it frames the cash rule and the multiples"])}</div>
   <div class="card"><div class="h">Fair value</div><p class="small">Three scenarios (bear, base, bull) for the next five years give price targets; weighted and brought back to today, after a margin of safety, they give the fair value. A free cash flow valuation at the sector's cost of capital is the cross-check.</p></div>
   <p class="note" style="text-align:center">Tarsier Research ${D ? "v" + esc(D.version) + " · method " + esc(D.method) : ""}<br>Educational analysis, not investment advice.</p>`;
 }
@@ -1428,8 +1528,11 @@ function route() {
   else if (h.startsWith("#/settings")) { html = settingsPage(); $("#n-s").classList.add("on"); }
   else if (h.startsWith("#/macro")) { html = macroPage(); $("#n-x").classList.add("on"); }
   else { html = research(); $("#n-w").classList.add("on"); }
+  // redraws on the same page (an ⓘ, a sort, prices arriving) keep you where you are;
+  // going to another page starts at the top (the hashchange listener below)
+  const y = window.scrollY;
   $("#app").innerHTML = html;
-  if (!m) window.scrollTo(0, 0);
+  window.scrollTo(0, y);
 }
 window.addEventListener("hashchange", () => { route(); window.scrollTo(0, 0); });
 if ("serviceWorker" in navigator && location.protocol == "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
