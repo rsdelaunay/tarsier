@@ -59,6 +59,7 @@ table.pt{width:100%;border-collapse:collapse;margin-top:6px;table-layout:fixed}t
 table.pt th:first-child,table.pt td:first-child{text-align:left;width:31%;color:#5B6675;font-size:11.5px}
 table.pt tr.calc td{color:#5B6675}table.pt tr.w td{font-weight:700;border-top:1px solid #EEF1F5}
 .pbtn{margin-top:8px;font:600 12px inherit;font-family:inherit;padding:7px 12px;border-radius:8px;border:1.5px solid #1B2A41;background:#fff;color:#1B2A41}
+select.pin{appearance:none;-webkit-appearance:none;text-align:right;text-align-last:right;padding-right:4px}
 .pin{width:100%;box-sizing:border-box;padding:5px 3px;border:1px solid #E3E7ED;border-radius:6px;background:#FAFBFC;font:inherit;font-size:12px;text-align:right;color:#1B2A41}
 .pin.typed{color:#1F5FD6;font-weight:700;border-color:#9DB9EC;background:#F1F6FF}
 .mpick{display:flex;gap:8px;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
@@ -1003,10 +1004,14 @@ function driversBox(c, v, d, M) {
   const t = c.ticker, s = PSC[t] || "base", D = d.scen[s], fys = d.labels.map(l => parseInt(l.slice(2, 6)));
   const yl = d.labels.map(l => "'" + l.slice(4, 6));
   const canEdit = !!(c.valuation && c.valuation.engine);
-  const cell = (key, y, val, typed, pct_) => canEdit
-    ? `<input class="pin${typed ? " typed" : ""}" inputmode="decimal" value="${val == null ? "" : val}" placeholder="${val == null ? "—" : ""}"
-        onchange="pEdit('${t}','${s}','${key}',${fys[y]},this.value,${pct_})">`
-    : (val == null ? "—" : val + (pct_ ? "%" : "×"));
+  const PCTS = Array.from({length: 31}, (_, i) => -50 + i * 5);     // −50% … 100%, every 5
+  const cell = (key, y, val, typed, pct_) => !canEdit ? (val == null ? "—" : val + (pct_ ? "%" : "×"))
+    : pct_ ? `<select class="pin${typed ? " typed" : ""}" onchange="pEdit('${t}','${s}','${key}',${fys[y]},this.value,true)">
+        ${typed ? `<option value="">↺ Tarsier's</option>` : ""}
+        ${val != null && !PCTS.includes(val) ? `<option value="${val}" selected>${Math.round(val)}%</option>` : ""}
+        ${PCTS.map(x => `<option value="${x}"${x === val ? " selected" : ""}>${x}%</option>`).join("")}</select>`
+    : `<input class="pin${typed ? " typed" : ""}" inputmode="decimal" value="${val == null ? "" : val}" placeholder="${val == null ? "—" : ""}"
+        onchange="pEdit('${t}','${s}','${key}',${fys[y]},this.value,false)">`;
   const row = (label, key, pct_, years) => `<tr><td>${label}</td>${fys.map((_, y) => `<td>${years.includes(y)
     ? cell(key, y, D[key][y], D[key + "_typed"][y], pct_) : ""}</td>`).join("")}</tr>`;
   const all = [0, 1, 2, 3, 4], tg = d.targets_at;
@@ -1016,12 +1021,12 @@ function driversBox(c, v, d, M) {
                 "P/D": "dividend", "P/TBV": "tangible book", "P/B": "book"}[basis] || "figure";
   const help = `The target at the end of each year = the next year's ${what} × the ${basis} multiple of that year`
     + (/^EV/.test(basis) ? ", plus net cash, per share" : "") + `. The weighted target mixes the three scenarios by their weights; brought back to today at your required return and less the margin of safety, it gives the fair value. `
-    + (canEdit ? "Tap a number to change it (blue = yours); empty it to go back to Tarsier's. Changes stay on this phone." : "Sync from the PC to edit these here.");
+    + (canEdit ? "Tap a growth to pick another from the list (−50% to 100%, every 5), or a multiple to type yours; blue = yours; ↺ Tarsier's (or an empty multiple) goes back. Changes stay on this phone." : "Sync from the PC to edit these here.");
   return `<div class="drv"><div class="dh"><b>What the targets rest on ${tipI("drv-" + t, help)}</b>
       <span class="ptabs">${["bear", "base", "bull"].map(x => `<button class="${x == s ? "on" : ""}" onclick="pTab('${t}','${x}')">${x[0].toUpperCase() + x.slice(1)} ${v.weights[x]}%</button>`).join("")}</span></div>
     <table class="pt"><tr><th></th>${yl.map(y => `<th>${y}</th>`).join("")}</tr>
-      ${row("Revenue growth %", "rev_growth", true, all)}
-      ${row("EPS growth %", "eps_growth", true, all)}
+      ${row("Revenue growth", "rev_growth", true, all)}
+      ${row("EPS growth", "eps_growth", true, all)}
       <tr class="calc"><td>EPS</td>${D.eps.map(x => `<td>${x == null ? "—" : "$" + x.toFixed(2)}</td>`).join("")}</tr>
       ${/sales|revenue/i.test(what) ? `<tr class="calc"><td>Revenue $B</td>${D.revenue.map(x => `<td>${x == null ? "—" : x.toFixed(1)}</td>`).join("")}</tr>` : ""}
       ${row(`${esc(basis || "Multiple")} ×`, "multiple", false, tg)}
