@@ -1183,10 +1183,11 @@ function portfolio() {
   const mk = list => { const order = list.map(([n]) => n).filter(n => n != "Other" && n != "Not classified");
     return n => n == "Other" ? "#AEB6C1" : n == "Not classified" ? "#D5DAE1" : (STY[n] && list === p.style ? STY[n] : SLOTS[order.indexOf(n) % SLOTS.length]); };
   setTimeout(loadMarket, 0);
-  return `${marketCard()}${warningsBox(p)}${monthCard(p)}`+`<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
+  return `<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
     <div class="card"><div class="h">By sector</div>${donut(fold(p.sector), mk(p.sector))}</div>
     <div class="card"><div class="h">By style</div>${donut(p.style, mk(p.style))}</div>
-    <p class="note" style="text-align:center">Shares of the money invested. Amounts stay on the PC.</p>`;
+    <p class="note" style="text-align:center">Shares of the portfolio's value at the PC's last Sync. Amounts never leave the PC unlocked.</p>
+    ${marketCard()}${warningsBox(p)}${monthCard(p)}`;
 }
 
 function saveToken(v) {
@@ -1428,8 +1429,11 @@ function route() {
   else if (h.startsWith("#/settings")) { html = settingsPage(); $("#n-s").classList.add("on"); }
   else if (h.startsWith("#/macro")) { html = macroPage(); $("#n-x").classList.add("on"); }
   else { html = research(); $("#n-w").classList.add("on"); }
+  // redraws on the same page (an ⓘ, a sort, prices arriving) keep you where you are;
+  // going to another page starts at the top (the hashchange listener below)
+  const y = window.scrollY;
   $("#app").innerHTML = html;
-  if (!m) window.scrollTo(0, 0);
+  window.scrollTo(0, y);
 }
 window.addEventListener("hashchange", () => { route(); window.scrollTo(0, 0); });
 if ("serviceWorker" in navigator && location.protocol == "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
