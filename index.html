@@ -998,12 +998,15 @@ function moRate(cur, base) {   // units of cur per 1 base, or null
   if (code == base) return f;
   const x = FXR[base + code]; return x ? x.rate * f : null;
 }
-function moSplit(p, T, amount, mk) {
+function moSplit(p, vals, amount, mk) {
   // the PC's rule, step by step (port_check.allocate): cash to its target, value/dividend while under 10%,
   // then the holdings 20%+ under their 52-week high, then the rest; by conviction, never past a cap; whole shares
   const R = p.rules, base = CUR_CODE[p.currency || "€"] || "EUR";
   const val = {}, by = {};
-  p.holdings.filter(h => h.w > 0).forEach(h => { val[h.t] = (val[h.t] || 0) + h.w / 100 * T; by[h.t] = h; });
+  for (const [t, v] of Object.entries(vals)) if (v > 0) {
+    val[t] = v; by[t] = p.holdings.find(h => h.t == t) || {t, style: t == "CASH" ? "Cash" : "Not classified", conviction: null, fund: false};
+  }
+  const T = Object.values(val).reduce((a, x) => a + x, 0);
   const after = T + amount, out = {to_cash: 0, lines: [], ph: [], left: 0, notes: [], cash: null, def: null};
   const cash = val.CASH || 0;
   let target = cashTarget(marketDD(mk || {}), R);
@@ -1086,19 +1089,72 @@ function moSplit(p, T, amount, mk) {
   if (skipped.length) out.notes.push(`No price for ${skipped.join(", ")}: left out`);
   return out;
 }
+// ---------- private.json: share counts and amounts, locked on the PC with your passphrase (engine/private.py) ----------
+let PRIV = null, privMsg = "", privBusy = false;
+async function unlockPrivate(box, pass) {
+  const enc = new TextEncoder(), b64 = x => Uint8Array.from(atob(x), ch => ch.charCodeAt(0));
+  const salt = b64(box.salt), nonce = b64(box.nonce), ct = b64(box.data), chk = b64(box.check);
+  const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let i = 0; a.forEach(x => { o.set(x, i); i += x.length; }); return o; };
+  const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveBits"]);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits({name: "PBKDF2", hash: "SHA-256", salt, iterations: box.rounds}, base, 512));
+  const hk = k => crypto.subtle.importKey("raw", k, {name: "HMAC", hash: "SHA-256"}, false, ["sign"]);
+  const ek = await hk(bits.slice(0, 32)), mk = await hk(bits.slice(32));
+  const tag = new Uint8Array(await crypto.subtle.sign("HMAC", mk, cat(salt, nonce, ct)));
+  if (tag.length != chk.length || tag.some((x, i) => x != chk[i])) throw new Error("wrong passphrase");
+  const out = new Uint8Array(ct.length);
+  for (let i = 0; i < ct.length; i += 32) {
+    const ctr = new Uint8Array(4); new DataView(ctr.buffer).setUint32(0, i / 32);
+    const pad = new Uint8Array(await crypto.subtle.sign("HMAC", ek, cat(nonce, ctr)));
+    for (let j = 0; j < 32 && i + j < ct.length; j++) out[i + j] = ct[i + j] ^ pad[j];
+  }
+  return JSON.parse(new TextDecoder().decode(out));
+}
+async function loadPrivate(force) {
+  const pass = LS.get("tarsier.pass", "");
+  if (!pass || privBusy || (PRIV && !force)) return;
+  privBusy = true;
+  try {
+    const r = await fetch("private.json?" + Date.now(), {cache: "no-store"});
+    if (r.status == 404) throw new Error("no private.json yet: set the passphrase in the PC's Settings and Sync");
+    if (!r.ok) throw new Error("private.json: " + r.status);
+    PRIV = await unlockPrivate(await r.json(), pass); privMsg = "";
+  } catch (e) { PRIV = null; privMsg = e.message == "wrong passphrase" ? "Wrong passphrase: it must be the same as on the PC." : e.message; }
+  privBusy = false; route();
+}
+function savePass(v) {
+  LS.set("tarsier.pass", (v || "").trim()); PRIV = null;
+  privMsg = v && v.trim() ? "Saved on this phone only. Checking it…" : "Passphrase removed from this phone.";
+  route(); if (v && v.trim()) loadPrivate(true).then(() => { if (PRIV) { privMsg = `Unlocked: ${PRIV.rows.length} holdings, as of the PC's Sync ${PRIV.saved}.`; route(); } });
+}
+function moValues(p) {
+  // today's value of each holding: shares x the live last close (converted), else the PC's value at Sync
+  const base = CUR_CODE[(PRIV && PRIV.currency) || p.currency || "€"] || "EUR", val = {};
+  let live = 0;
+  for (const r of PRIV.rows) {
+    const h = HI[r.t], rate = h && h.currency ? moRate(h.currency, base) : null;
+    let v = r.value || r.invested || 0;
+    if (r.t != "CASH" && r.shares && h && h.close && !h.missing && rate) { v = r.shares * h.close / rate; live++; }
+    val[r.t] = (val[r.t] || 0) + v;
+  }
+  return {val, live};
+}
 function moSet(k, v) { const x = parseFloat(String(v).replace(/\s/g, "").replace(",", ".")); LS.set(k, x > 0 ? x : 0); route(); }
 function monthCard(p) {
   if (!p.holdings || !p.rules) return "";
-  const A = LS.get("tarsier.month", 0), T = LS.get("tarsier.pvalue", 0), cur = p.currency || "€";
+  const A = LS.get("tarsier.month", 0), cur = p.currency || "€", pass = LS.get("tarsier.pass", "");
+  if (pass && !PRIV && !privBusy && !privMsg) setTimeout(() => loadPrivate(false), 0);
   const n = x => Math.round(x).toLocaleString("en-US");
   const held = p.holdings.filter(h => h.t != "CASH" && h.w > 0);
   const have = held.some(h => HI[h.t] && (HI[h.t].close || HI[h.t].missing));
-  if (A > 0 && T > 0 && !have && !moBusy) setTimeout(() => moFetch(false), 0);
+  if (A > 0 && PRIV && !have && !moBusy) setTimeout(() => moFetch(false), 0);
   let body = "";
-  if (!(A > 0 && T > 0)) body = `<p class="note">Type both amounts to see where this month's money goes.</p>`;
+  if (!pass) body = `<p class="note">Save the private passphrase in <a href="#/settings">Settings</a> (the same as on the PC): it unlocks your share counts, so only the amount is needed here.</p>`;
+  else if (!PRIV) body = `<p class="note">${esc(privMsg || "Unlocking your holdings…")}</p>`;
+  else if (!(A > 0)) body = `<p class="note">Type what you saved to invest this month.</p>`;
   else if (moBusy || !have) body = `<p class="note">${esc(moMsg || "Getting prices…")}</p>`;
   else {
-    const o = moSplit(p, T, A, MK || D.market);
+    const mv = moValues(p);
+    const o = moSplit(p, mv.val, A, MK || D.market);
     const sym = {USD: "$", EUR: "€", GBP: "£", GBp: "p "};
     const row = (cls, t, sub, sh, amt) => `<tr class="${cls}"><td><b>${esc(t)}</b>${sub ? `<div class="tiny muted">${sub}</div>` : ""}</td><td class="r">${sh}</td><td class="r"><b>${amt}</b></td></tr>`;
     let rows = row("", "CASH", esc(`${(o.cash.now * 100).toFixed(0)}% now, target ${(o.cash.target * 100).toFixed(0)}%: ${o.to_cash ? "refilled to the target" : "above the target"}${o.left > 0.005 ? ` · + ${n(o.left)} left over` : ""}`), "", n(o.to_cash + o.left));
@@ -1111,13 +1167,13 @@ function monthCard(p) {
     rows += `<tr class="mot"><td><b>Total</b></td><td></td><td class="r"><b>${n(o.spent)}</b></td></tr>`;
     const day = (Object.values(HI).find(h => h && h.day) || {}).day || "";
     body = `<table class="mo"><tr><th>Ticker</th><th class="r">Shares</th><th class="r">Put in ${esc(cur)}</th></tr>${rows}</table>
-      ${pointers(o.notes.concat([`Closes of ${day} (Yahoo Finance); whole shares at the last close, converted at Yahoo's rate. Total never passes the amount`]))}`;
+      ${pointers(o.notes.concat([`Holdings valued live: ${mv.live} by shares × last close (${day}, Yahoo Finance); the rest at the PC's Sync of ${PRIV.saved}`,
+        "Whole shares at the last close, converted at Yahoo's rate. Total never passes the amount"]))}`;
   }
   return `<div class="card"><div class="h" style="display:flex;justify-content:space-between">This month's money
-      <span onclick="moFetch(true)" style="cursor:pointer;color:var(--muted);font-size:15px;letter-spacing:0">↻</span></div>
-    <div class="moin"><label>To invest (${esc(cur)})<input inputmode="decimal" value="${A || ""}" onchange="moSet('tarsier.month', this.value)"></label>
-      <label>Portfolio value now (${esc(cur)})<input inputmode="decimal" value="${T || ""}" onchange="moSet('tarsier.pvalue', this.value)"></label></div>
-    <p class="tiny muted" style="margin:4px 0 8px">Both stay on this phone: the app is public, so amounts are never synced.</p>${body}</div>`;
+      <span onclick="loadPrivate(true);moFetch(true)" style="cursor:pointer;color:var(--muted);font-size:15px;letter-spacing:0">↻</span></div>
+    <div class="moin"><label>To invest this month (${esc(cur)})<input inputmode="decimal" value="${A || ""}" onchange="moSet('tarsier.month', this.value)"></label></div>
+    <p class="tiny muted" style="margin:4px 0 8px">Stays on this phone. Your holdings come locked from the PC (private passphrase).</p>${body}</div>`;
 }
 
 function portfolio() {
@@ -1196,6 +1252,12 @@ function settingsPage() {
       <button onclick="testSync()" style="background:var(--soft);color:var(--navy)">Check connection</button>
       ${has ? `<button onclick="saveToken('')" style="background:var(--soft);color:var(--bad)">Remove</button>` : ""}</div>
     ${setMsg ? `<p class="note">${esc(setMsg)}</p>` : ""}</div>
+  <div class="card set"><div class="h">Private passphrase</div>
+    <p class="small">The same passphrase as in the PC's Settings. It unlocks your share counts and amounts (private.json), so This month's money works with only the amount to invest. It stays on this phone only.</p>
+    <input id="ppw" type="password" placeholder="${LS.get("tarsier.pass", "") ? "Passphrase saved · type a new one to replace it" : "the PC's private passphrase"}" autocomplete="off">
+    <div class="row2"><button onclick="savePass(document.getElementById('ppw').value)">Save passphrase</button>
+      ${LS.get("tarsier.pass", "") ? `<button onclick="savePass('')" style="background:var(--soft);color:var(--bad)">Remove</button>` : ""}</div>
+    ${privMsg ? `<p class="note">${esc(privMsg)}</p>` : ""}</div>
   <div class="card set"><div class="h">Looked up on this phone · ${looked.length}</div>
     ${looked.length ? `<table class="looked">${looked.map(r => { const c = r.company, g = c && c.latest;
       return `<tr><td><b>${esc(r.ticker)}</b> <span class="tiny muted">${esc((r.fetched || "").slice(0, 10))}</span></td>
