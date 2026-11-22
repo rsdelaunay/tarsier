@@ -48,6 +48,15 @@ nav a.on svg{stroke:var(--navy)}
 .h{font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--navy);text-transform:uppercase;margin:0 0 8px}
 .muted{color:var(--muted)} .small{font-size:12px} .tiny{font-size:11px}
 .badge{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;border-radius:8px}
+.moin{display:flex;gap:10px}.moin label{flex:1;font-size:12px;color:var(--muted)}
+.moin input{display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:8px;font:inherit;font-size:15px;border:1.5px solid #E0C46A;border-radius:8px;background:#FFF6D6;text-align:right}
+table.mo{width:100%;border-collapse:collapse}table.mo td,table.mo th{padding:6px 4px;border-bottom:1px solid #EEF1F5;vertical-align:top;font-size:13px}
+table.mo .r{text-align:right;white-space:nowrap}table.mo tr.moy td{background:#FFF8D6;color:#3D3300}table.mo tr.mot td{border-bottom:0;border-top:1.5px solid #D9DEE5}
+.mpick{display:flex;gap:8px;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
+.mchip{font:700 12px/1 inherit;font-family:inherit;padding:7px 10px;border-radius:999px;border:1.5px solid var(--navy,#1B2A41);background:#fff;color:var(--navy,#1B2A41)}
+.mchip.on{background:#E3F1E6;border-color:#1E7B34;color:#1E7B34}
+.msel{font:700 12px inherit;font-family:inherit;padding:6px 8px;border-radius:8px;border:0;background:#1B2A41;color:#fff;max-width:56%}
+.msel.alt{background:#B26A00}
 .chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;margin-right:4px;vertical-align:2px}
 .chip.quick{background:#FFF1D6;color:#8A5A00;border:1px solid #F0D9A8}
 table.cmp .qtag{font-size:8.5px;font-weight:700;letter-spacing:.3px;color:#8A5A00;background:#FFF1D6;border-radius:4px;padding:1px 4px;display:table;margin:0 0 3px auto}
@@ -739,17 +748,32 @@ function company(t) {
     </div>${q.cash_points ? pointers(q.cash_points, "Where the cash went") : `<p class="note">${esc(f.verdict)}</p>`}${riskBox(q.holder_risks)}</div>`;
 
   if (v) {
-    const sc = v.scenarios, yrs = v.target_years;
-    html += `<div class="card"><div class="h">Fair value · after a ${v.margin_of_safety}% margin of safety</div>
-      <div class="vals"><div><div class="k">BY MULTIPLE</div><div class="v">${usd(v.fair_value)}</div>
-        <div class="tiny ${v.upside == null ? "muted" : v.upside >= 0 ? "up" : "down"}">${v.upside == null ? "no price saved" : pct(v.upside, 1) + " vs " + usd(v.price)}</div></div>
+    const yrs = v.target_years, ms = v.methods || [];
+    const pc = ms.find(m => m.current), sug = ms.find(m => m.suggested);
+    const M = ms.find(m => m.code == MPICK[c.ticker]) || pc;          // the method shown: picked here, else the PC's
+    const alt = M && pc && M.code != pc.code;
+    const fv = alt ? M.fair_value : v.fair_value, up = alt ? M.upside : v.upside, er = alt ? M.expected_return : v.expected_return;
+    const tg = s => alt ? M.targets[s] : v.scenarios[s].targets, wt = alt ? M.weighted_targets : v.weighted_targets;
+    const risks = (v.holder_risks || []).filter(x => !(q.holder_risks || []).some(y => y.head == x.head) && x.head != "This valuation ignores stock pay");
+    if (M && M.note) risks.unshift({level: "watch", head: "This valuation ignores stock pay", text: M.note});
+    const picker = ms.length > 1 ? `<div class="mpick">
+        <button class="mchip${M.code == sug.code ? " on" : ""}" onclick="pickMethod('${c.ticker}','${sug.code}')">${M.code == sug.code ? "✓ " : ""}Suggested: ${esc(sug.short)}</button>
+        <select class="msel${M.code != sug.code ? " alt" : ""}" onchange="pickMethod('${c.ticker}', this.value)">
+          <option value="">${M.code == sug.code ? "Other methods" : "Using: " + esc(M.short)}</option>
+          ${ms.map(m => `<option value="${m.code}">${m.code == M.code ? "✓ " : ""}${esc(m.label)}${m.suggested ? " · suggested" : ""}</option>`).join("")}
+        </select></div>
+      ${v.business_model ? `<p class="tiny muted" style="margin:4px 0 0">Business model: ${esc(v.business_model)}${M.code != sug.code ? " · your choice, on this phone only" : ""}</p>` : ""}` : "";
+    html += `<div class="card"><div class="h">Fair value · after a ${v.margin_of_safety}% margin of safety</div>${picker}
+      <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""}</div><div class="v">${usd(fv)}</div>
+        <div class="tiny ${up == null ? "muted" : up >= 0 ? "up" : "down"}">${up == null ? "no price saved" : pct(up, 1) + " vs " + usd(v.price)}</div></div>
         <div><div class="k">BY FREE CASH FLOW</div><div class="v">${usd(v.dcf_value)}</div>
         <div class="tiny ${v.dcf_upside == null ? "muted" : v.dcf_upside >= 0 ? "up" : "down"}">${v.dcf_upside == null ? "cross-check" : pct(v.dcf_upside, 1) + " vs price"}</div></div></div>
       <table><tr><th>Price target</th>${yrs.map(y => `<th>${esc(y.replace("FY", "").replace("E", ""))}</th>`).join("")}</tr>
-      ${["bear", "base", "bull"].map(s => `<tr><td>${s[0].toUpperCase() + s.slice(1)} <span class="tiny muted">${v.weights[s]}%</span></td>${sc[s].targets.map(x => `<td>${usd(x)}</td>`).join("")}</tr>`).join("")}
-      <tr class="w"><td>Weighted</td>${v.weighted_targets.map(x => `<td>${usd(x)}</td>`).join("")}</tr></table>
-      ${riskBox((v.holder_risks || []).filter(x => !(q.holder_risks || []).some(y => y.head == x.head)), "Before trusting the target")}
-      ${v.expected_return != null ? `<p class="note">Expected yearly return at today's price: <b>${pct(v.expected_return, 1)}</b>.</p>` : ""}
+      ${["bear", "base", "bull"].map(s => `<tr><td>${s[0].toUpperCase() + s.slice(1)} <span class="tiny muted">${v.weights[s]}%</span></td>${tg(s).map(x => `<td>${usd(x)}</td>`).join("")}</tr>`).join("")}
+      <tr class="w"><td>Weighted</td>${wt.map(x => `<td>${usd(x)}</td>`).join("")}</tr></table>
+      ${riskBox(risks, "Before trusting the target")}
+      ${er != null ? `<p class="note">Expected yearly return at today's price: <b>${pct(er, 1)}</b>.</p>` : ""}
+      ${alt ? `<p class="note">The points below explain the PC's method (${esc(pc.short)}).</p>` : ""}
       ${v.how_points && v.how_points.length ? pointers(v.how_points, "From target to fair value") : ""}
       ${v.why_points && v.why_points.length ? pointers(v.why_points, "Why the two values differ") :
         v.reconcile && v.reconcile.length ? `<p class="note">Why the two values differ: ${esc(v.reconcile.join(" "))}</p>` : ""}</div>`;
@@ -909,10 +933,191 @@ function warningsBox(p) {
     `<li><i class="${x.level == "high" ? "hi" : ""}"></i><span><b>${esc(x.head)}</b> · ${esc(x.text)}</span></li>`).join("")}</ul></div>`;
 }
 
+const MPICK = LS.get("tarsier.method", {});
+function pickMethod(t, code) {
+  if (!code) return;
+  const ms = ((allCos().find(x => x.ticker == t) || {}).valuation || {}).methods || [];
+  const pc = ms.find(m => m.current);
+  if (pc && code == pc.code) delete MPICK[t]; else MPICK[t] = code;
+  LS.set("tarsier.method", MPICK);
+  route();
+}
+
 function riskBox(list, title) {
   if (!list || !list.length) return "";
   return `<div class="warn" style="margin:10px 0 0"><div class="wh">${SIGN} ${esc(title || "Shareholder risks")} · ${list.length}</div><ul>${list.map(x =>
     `<li><i class="${x.level == "high" ? "hi" : ""}"></i><span><b>${esc(x.head)}</b> · ${esc(x.text)}</span></li>`).join("")}</ul></div>`;
+}
+
+// ---------- This month's money: worked out on the phone; the two amounts typed here never leave it ----------
+let HI = LS.get("tarsier.hi", {}), FXR = LS.get("tarsier.fx", {}), moBusy = false, moMsg = "";
+const CUR_CODE = {"€": "EUR", "$": "USD", "£": "GBP", "CHF": "CHF"};
+function lastBar(res) {        // the last FINISHED session: while the market is open, today's bar still moves
+  const ts = res.timestamp || [], cl = (((res.indicators || {}).quote || [])[0] || {}).close || [];
+  const bars = ts.map((t, i) => [t, cl[i]]).filter(b => b[1] > 0);
+  if (!bars.length) return null;
+  const reg = ((res.meta || {}).currentTradingPeriod || {}).regular || {}, now = Date.now() / 1000;
+  const open = reg.start && reg.end && reg.start <= now && now < reg.end;
+  return open && bars.length > 1 && bars[bars.length - 1][0] >= reg.start ? bars[bars.length - 2] : bars[bars.length - 1];
+}
+async function moFetch(force) {
+  const p = D && D.portfolio; if (!p || moBusy) return;
+  moBusy = true; moMsg = "Getting each holding's last close and highs…"; route();
+  const now = Date.now(), held = p.holdings.filter(h => h.t != "CASH" && h.w > 0).map(h => h.t);
+  for (const t of held) {
+    const c = HI[t];
+    if (c && !force && now - c.at < 15 * 60 * 1000) continue;
+    const sym = encodeURIComponent(t.toUpperCase().replace(".", "-"));
+    try {
+      const r = await fetch(`${RELAY}/price/${sym}`); if (!r.ok) throw new Error();
+      const res = chartMeta(await r.json()), b = res && lastBar(res); if (!b) throw new Error();
+      const close = b[1], hi = Math.max(res.meta.fiftyTwoWeekHigh || 0, close);
+      let ath = c && c.ath, athAt = c ? c.athAt || 0 : 0;
+      if (!ath || now - athAt > 864e5) {
+        try { const a = await fetch(`${RELAY}/ath/${sym}`); if (a.ok) { const qq = (((chartMeta(await a.json()) || {}).indicators || {}).quote || [])[0] || {};
+          const hs = (qq.high || []).filter(x => x > 0); if (hs.length) { ath = Math.max(...hs); athAt = now; } } } catch (e) {}
+      }
+      ath = Math.max(ath || 0, hi);
+      HI[t] = {close, high_52w: hi, ath, athAt, currency: res.meta.currency || "", from_52w: close / hi - 1, from_ath: close / ath - 1,
+        at: now, day: new Date(b[0] * 1000).toISOString().slice(0, 10)};
+    } catch (e) { HI[t] = c && c.close ? Object.assign({}, c, {stale: true}) : {missing: true, at: now}; }
+  }
+  const base = CUR_CODE[p.currency || "€"] || "EUR";
+  for (const cur of new Set(held.map(t => (HI[t] || {}).currency).filter(Boolean))) {
+    const code = cur == "GBp" ? "GBP" : cur.toUpperCase(), key = base + code;
+    if (code == base || (FXR[key] && !force && now - FXR[key].at < 15 * 60 * 1000)) continue;
+    try { const r = await fetch(`${RELAY}/price/${key}=X`); const res = r.ok && chartMeta(await r.json());
+      if (res && res.meta && res.meta.regularMarketPrice) FXR[key] = {rate: res.meta.regularMarketPrice, at: now}; } catch (e) {}
+  }
+  LS.set("tarsier.hi", HI); LS.set("tarsier.fx", FXR);
+  moBusy = false; moMsg = ""; route();
+}
+function moRate(cur, base) {   // units of cur per 1 base, or null
+  if (!cur) return null;
+  const code = cur == "GBp" ? "GBP" : cur.toUpperCase(), f = cur == "GBp" ? 100 : 1;
+  if (code == base) return f;
+  const x = FXR[base + code]; return x ? x.rate * f : null;
+}
+function moSplit(p, T, amount, mk) {
+  // the PC's rule, step by step (port_check.allocate): cash to its target, value/dividend while under 10%,
+  // then the holdings 20%+ under their 52-week high, then the rest; by conviction, never past a cap; whole shares
+  const R = p.rules, base = CUR_CODE[p.currency || "€"] || "EUR";
+  const val = {}, by = {};
+  p.holdings.filter(h => h.w > 0).forEach(h => { val[h.t] = (val[h.t] || 0) + h.w / 100 * T; by[h.t] = h; });
+  const after = T + amount, out = {to_cash: 0, lines: [], ph: [], left: 0, notes: [], cash: null, def: null};
+  const cash = val.CASH || 0;
+  let target = cashTarget(marketDD(mk || {}), R);
+  if (target == null) { target = R.cash_min; out.notes.push(`No market prices: cash kept at the ${pct(R.cash_min * 100, 0)} minimum`); }
+  out.to_cash = Math.min(amount, Math.max(0, target * after - cash));
+  let left = amount - out.to_cash;
+  out.cash = {now: cash / T, target};
+  if (out.to_cash >= amount - 0.005) out.notes.push(`All of it to cash: cash is ${(cash / T * 100).toFixed(0)}%, the target ${(target * 100).toFixed(0)}% (${(R.cash_min * 100).toFixed(0)}–${(R.cash_max * 100).toFixed(0)}% band). Stocks wait`);
+  const conv = t => by[t].conviction || null, isF = t => !!by[t].fund;
+  const room = t => isF(t) ? Infinity : Math.max(0, (R.caps[conv(t) || R.default] || 0.1) * after - val[t]);
+  const wgt = t => isF(t) ? 2 : (R.weights || {})[conv(t) || ""] || 2;
+  const rooms = {}; Object.keys(val).filter(t => t != "CASH").forEach(t => rooms[t] = room(t));
+  const shareOut = (money, group, got) => {
+    group = group.filter(t => rooms[t] - (got[t] || 0) > 0.005);
+    while (money > 0.005 && group.length) {
+      const ws = group.reduce((a, t) => a + wgt(t), 0); let spill = 0;
+      for (const t of group) { const sh = money * wgt(t) / ws, take = Math.min(sh, rooms[t] - (got[t] || 0)); got[t] = (got[t] || 0) + take; spill += sh - take; }
+      money = spill; group = group.filter(t => rooms[t] - (got[t] || 0) > 0.005);
+    }
+    return money;
+  };
+  // value and dividend
+  const styles = R.defensive_styles || ["Value", "Dividend"];
+  const defs = Object.keys(rooms).filter(t => styles.includes(by[t].style));
+  const defNow = defs.reduce((a, t) => a + val[t], 0), invAfter = after - cash - out.to_cash;
+  const gap = Math.max(0, (R.defensive_min || 0.1) * invAfter - defNow);
+  const defAmt = left > 0.005 ? Math.min(gap, left * (R.defensive_share || 1 / 3)) : 0, defGot = {};
+  if (defAmt > 0.005) {
+    for (const st of styles) {
+      const held = defs.filter(t => by[t].style == st && conv(t) != "Gamble");
+      const rest = shareOut(defAmt / styles.length, held, defGot);
+      if (rest > 0.005) out.ph.push({style: st, amount: rest});
+    }
+    const sh = T - cash > 0 ? defNow / (T - cash) : 0;
+    out.def = {now: sh, min: R.defensive_min || 0.1};
+    out.notes.push(`Value and dividend are ${(sh * 100).toFixed(0)}% of what is invested (under ${((R.defensive_min || 0.1) * 100).toFixed(0)}%): ${Math.round(defAmt).toLocaleString("en-US")} of this month builds them up (yellow lines)`);
+    left -= defAmt;
+  }
+  // the stocks, discounted first
+  const got = Object.assign({}, defGot), cands = [], skipped = [];
+  for (const t of Object.keys(rooms)) {
+    const h = HI[t];
+    if (!h || h.missing) { if (!(t in defGot)) { skipped.push(t); continue; } }
+    const f52 = h && !h.missing ? h.from_52w : null;
+    cands.push({t, bucket: f52 != null && f52 <= -R.discount ? "discounted" : "near", f52, fath: h && !h.missing ? h.from_ath : null,
+      close: h && !h.missing ? h.close : null, cur: h ? h.currency : ""});
+  }
+  for (const b of ["discounted", "near"]) left = shareOut(left, cands.filter(c => c.bucket == b && c.f52 != null).map(c => c.t), got);
+  // whole shares
+  const unit = {}; cands.forEach(c => { const r = moRate(c.cur, base); if (c.close && r) unit[c.t] = c.close / r; });
+  const want = Object.assign({}, got), shares = {}, spent = {};
+  Object.keys(rooms).forEach(t => { shares[t] = unit[t] ? Math.floor((want[t] || 0) / unit[t]) : 0; spent[t] = unit[t] ? shares[t] * unit[t] : (want[t] || 0); });
+  let loose = Object.values(want).reduce((a, x) => a + x, 0) - Object.values(spent).reduce((a, x) => a + x, 0) + left;
+  const pool = cands.filter(c => unit[c.t] && ((want[c.t] || 0) > 0.005 || c.bucket == "discounted")).map(c => c.t);
+  for (const nearest of [true, false]) {
+    for (;;) {
+      const fit = pool.filter(t => unit[t] <= loose + 1e-9 && spent[t] + unit[t] <= rooms[t] + 1e-9 && (!nearest || (want[t] || 0) - spent[t] >= unit[t] / 2));
+      if (!fit.length) break;
+      const t = nearest ? fit.reduce((a, b) => ((want[b] || 0) - spent[b]) / unit[b] > ((want[a] || 0) - spent[a]) / unit[a] ? b : a)
+                        : fit.reduce((a, b) => spent[b] + unit[b] - (want[b] || 0) < spent[a] + unit[a] - (want[a] || 0) ? b : a);
+      shares[t]++; spent[t] += unit[t]; loose -= unit[t];
+    }
+  }
+  out.left = loose;
+  for (const c of cands) {
+    c.want = want[c.t] || 0; c.amount = spent[c.t] || 0; c.shares = unit[c.t] ? shares[c.t] : null; c.unit = unit[c.t];
+    c.def = Math.min(defGot[c.t] || 0, c.amount);
+    const why = [];
+    if (c.def > 0.005) why.push(`${Math.round(c.def)} for value/dividend`);
+    if (c.amount - c.def > 0.005) why.push(c.bucket == "discounted" ? `${(-c.f52 * 100).toFixed(0)}% under its 52-week high` : "near its high");
+    if (!why.length && c.shares === 0 && c.want > 0.005) why.push(`one share (${Math.round(c.unit)}) is more than its ${Math.round(c.want)}`);
+    if (!why.length) why.push(rooms[c.t] - c.amount <= 0.005 ? "at its conviction cap" : c.bucket == "near" ? "near its high" : "");
+    c.why = why.filter(Boolean).join(" · ");
+  }
+  out.lines = cands.sort((a, b) => (a.bucket != "discounted") - (b.bucket != "discounted") || b.amount - a.amount);
+  out.spent = out.to_cash + cands.reduce((a, c) => a + c.amount, 0) + out.ph.reduce((a, x) => a + x.amount, 0);
+  if (out.left > 0.005) out.notes.push(`${Math.round(out.left)} left: no whole share fits it, so it stays in cash`);
+  const noFx = cands.filter(c => c.want > 0.005 && !unit[c.t]).map(c => c.t);
+  if (noFx.length) out.notes.push(`No exchange rate for ${noFx.join(", ")}: the amount is shown, not shares`);
+  if (skipped.length) out.notes.push(`No price for ${skipped.join(", ")}: left out`);
+  return out;
+}
+function moSet(k, v) { const x = parseFloat(String(v).replace(/\s/g, "").replace(",", ".")); LS.set(k, x > 0 ? x : 0); route(); }
+function monthCard(p) {
+  if (!p.holdings || !p.rules) return "";
+  const A = LS.get("tarsier.month", 0), T = LS.get("tarsier.pvalue", 0), cur = p.currency || "€";
+  const n = x => Math.round(x).toLocaleString("en-US");
+  const held = p.holdings.filter(h => h.t != "CASH" && h.w > 0);
+  const have = held.some(h => HI[h.t] && (HI[h.t].close || HI[h.t].missing));
+  if (A > 0 && T > 0 && !have && !moBusy) setTimeout(() => moFetch(false), 0);
+  let body = "";
+  if (!(A > 0 && T > 0)) body = `<p class="note">Type both amounts to see where this month's money goes.</p>`;
+  else if (moBusy || !have) body = `<p class="note">${esc(moMsg || "Getting prices…")}</p>`;
+  else {
+    const o = moSplit(p, T, A, MK || D.market);
+    const sym = {USD: "$", EUR: "€", GBP: "£", GBp: "p "};
+    const row = (cls, t, sub, sh, amt) => `<tr class="${cls}"><td><b>${esc(t)}</b>${sub ? `<div class="tiny muted">${sub}</div>` : ""}</td><td class="r">${sh}</td><td class="r"><b>${amt}</b></td></tr>`;
+    let rows = row("", "CASH", esc(`${(o.cash.now * 100).toFixed(0)}% now, target ${(o.cash.target * 100).toFixed(0)}%: ${o.to_cash ? "refilled to the target" : "above the target"}${o.left > 0.005 ? ` · + ${n(o.left)} left over` : ""}`), "", n(o.to_cash + o.left));
+    for (const x of o.ph) rows += row("moy", x.style.toUpperCase() + " · new", esc(`a ${x.style.toLowerCase()} stock you pick, whole shares up to this · value + dividend ${(o.def.now * 100).toFixed(0)}% of invested, aim ${(o.def.min * 100).toFixed(0)}%+`), "", "≈ " + n(x.amount));
+    for (const c of o.lines) {
+      const s = sym[c.cur] || (c.cur ? c.cur + " " : "");
+      const sub = [c.close ? `${s}${c.close.toFixed(2)}` : "", c.f52 != null ? `${(c.f52 * 100).toFixed(1)}% vs 52w high` : "", c.fath != null ? `${(c.fath * 100).toFixed(0)}% vs ATH` : "", c.why].filter(Boolean).join(" · ");
+      rows += row(c.def > 0.005 ? "moy" : "", c.t, esc(sub), c.shares == null ? "" : c.shares, n(c.amount));
+    }
+    rows += `<tr class="mot"><td><b>Total</b></td><td></td><td class="r"><b>${n(o.spent)}</b></td></tr>`;
+    const day = (Object.values(HI).find(h => h && h.day) || {}).day || "";
+    body = `<table class="mo"><tr><th>Ticker</th><th class="r">Shares</th><th class="r">Put in ${esc(cur)}</th></tr>${rows}</table>
+      ${pointers(o.notes.concat([`Closes of ${day} (Yahoo Finance); whole shares at the last close, converted at Yahoo's rate. Total never passes the amount`]))}`;
+  }
+  return `<div class="card"><div class="h" style="display:flex;justify-content:space-between">This month's money
+      <span onclick="moFetch(true)" style="cursor:pointer;color:var(--muted);font-size:15px;letter-spacing:0">↻</span></div>
+    <div class="moin"><label>To invest (${esc(cur)})<input inputmode="decimal" value="${A || ""}" onchange="moSet('tarsier.month', this.value)"></label>
+      <label>Portfolio value now (${esc(cur)})<input inputmode="decimal" value="${T || ""}" onchange="moSet('tarsier.pvalue', this.value)"></label></div>
+    <p class="tiny muted" style="margin:4px 0 8px">Both stay on this phone: the app is public, so amounts are never synced.</p>${body}</div>`;
 }
 
 function portfolio() {
@@ -922,7 +1127,7 @@ function portfolio() {
   const mk = list => { const order = list.map(([n]) => n).filter(n => n != "Other" && n != "Not classified");
     return n => n == "Other" ? "#AEB6C1" : n == "Not classified" ? "#D5DAE1" : (STY[n] && list === p.style ? STY[n] : SLOTS[order.indexOf(n) % SLOTS.length]); };
   setTimeout(loadMarket, 0);
-  return `${marketCard()}${warningsBox(p)}`+`<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
+  return `${marketCard()}${warningsBox(p)}${monthCard(p)}`+`<div class="card"><div class="h">By company · ${p.positions} positions</div>${donut(fold(p.ticker), mk(p.ticker))}</div>
     <div class="card"><div class="h">By sector</div>${donut(fold(p.sector), mk(p.sector))}</div>
     <div class="card"><div class="h">By style</div>${donut(p.style, mk(p.style))}</div>
     <p class="note" style="text-align:center">Shares of the money invested. Amounts stay on the PC.</p>`;
