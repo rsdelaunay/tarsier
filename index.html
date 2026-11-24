@@ -1666,7 +1666,7 @@ function mxNext(X, key) {
   if (n.date < today) return "";                                  // the PC's list is older than this week: wait for a Sync
   const d = new Date(n.date + "T12:00:00"), hot = isoWeek(d) == isoWeek(now);
   const day = n.date == today ? "today" : d.toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short"});
-  return `<div class="b" style="margin-top:3px;${hot ? "color:var(--bad);font-weight:700" : ""}">${hot ? "●" : "○"} next: ${esc(day)} · ${esc(n.what)}${hot ? " · this week" : ""}</div>`;
+  return `<div class="b" style="margin-top:3px;${hot ? "color:var(--bad);font-weight:700" : ""}">Next release: ${esc(day)}</div>`;
 }
 function macroPage() {
   const X = D && D.macro;
