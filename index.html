@@ -1364,7 +1364,7 @@ function settingsPage() {
 
 // ---------- Macroeconomy: what the PC sent at its last Sync (FRED, fed funds futures) ----------
 const MXG = {A: "#1E7B34", B: "#5FA463", C: "#D9A320", D: "#E07B39", F: "#B3261E"};
-const MXL = ["#2a78d6", "#eb6834"];
+const MXL = ["#2a78d6", "#eb6834", "#1baf7a"];   // validated set; every line is labelled at its end
 const MX_SIGN = `<svg width="22" height="20" viewBox="0 0 26 23" style="flex:none"><path d="M13 2 25 21H1z" fill="#F5C518" stroke="#3D3300" stroke-width="2" stroke-linejoin="round"/><text x="13" y="18.5" text-anchor="middle" font-size="12" font-weight="700" fill="#3D3300" font-family="sans-serif">!</text></svg>`;
 let mxOpen = null, mxHover = {};
 function mxPeriod(d, f) {
@@ -1390,34 +1390,37 @@ function mxTrend(obs) {
   const d3 = obs[obs.length - 1][1] - obs[obs.length - 4][1], d6 = obs.length >= 7 ? obs[obs.length - 1][1] - obs[obs.length - 7][1] : d3;
   return [Math.abs(d6) < 0.15 && Math.abs(d3) < 0.15 ? "flat" : d6 + d3 > 0 ? "rising" : "falling", d6, d3];
 }
-function mxChart(key, title, series, ref) {
+function mxChart(key, title, series, ref, o = {}) {
+  const unit = o.unit ?? "%", dg = o.digits ?? 1, fv = v => v.toFixed(dg) + unit, weekly = o.freq == "w";
   const names = Object.keys(series).filter(n => series[n] && series[n].length);
   if (!names.length) return `<div class="card mx-c"><div class="h">${esc(title)}</div><p class="small muted">No data yet.</p></div>`;
   const dates = [...new Set(names.flatMap(n => series[n].map(p => p[0])))].sort();
   const vals = names.flatMap(n => series[n].map(p => p[1])).concat(ref != null ? [ref] : []);
   let lo = Math.min(...vals), hi = Math.max(...vals); const pad = Math.max((hi - lo) * 0.15, 0.2); lo -= pad; hi += pad;
-  const W = 360, H = 170, L = 36, R = 44, T = 8, B = 20, x0 = L, x1 = W - R, y0 = T, y1 = H - B;
+  const W = 360, H = 170, L = 36, R = o.names ? 72 : 44, T = 8, B = 20, x0 = L, x1 = W - R, y0 = T, y1 = H - B;
   const X = d => x0 + (x1 - x0) * dates.indexOf(d) / Math.max(dates.length - 1, 1), Y = v => y1 - (y1 - y0) * (v - lo) / (hi - lo);
   const step = [0.25, 0.5, 1, 2, 5, 10].find(st => (hi - lo) / st <= 5);
   let g = "";
   for (let v = Math.ceil(lo / step) * step; v < hi; v += step)
-    g += `<line x1="${x0}" x2="${x1}" y1="${Y(v)}" y2="${Y(v)}" stroke="#E6E9EE"/><text x="${x0 - 5}" y="${Y(v) + 3}" text-anchor="end" font-size="9" fill="#6B7785">${+v.toFixed(2)}%</text>`;
-  dates.forEach(d => { const mo = +d.slice(5, 7);
+    g += `<line x1="${x0}" x2="${x1}" y1="${Y(v)}" y2="${Y(v)}" stroke="#E6E9EE"/><text x="${x0 - 5}" y="${Y(v) + 3}" text-anchor="end" font-size="9" fill="#6B7785">${+v.toFixed(2)}${unit}</text>`;
+  let pm = null;
+  dates.forEach(d => { const mo = +d.slice(5, 7); if (mo == pm) return; pm = mo;   // weekly points: a month's first only
     if ([1, 4, 7, 10].includes(mo)) g += `<text x="${X(d)}" y="${H - 6}" text-anchor="middle" font-size="9" ${mo == 1 ? 'font-weight="700" fill="#1F2933"' : 'fill="#6B7785"'}>${mo == 1 ? d.slice(0, 4) : "AJO"[(mo - 4) / 3]}</text>`;
     if (mo == 1 && d != dates[0]) g += `<line x1="${X(d)}" x2="${X(d)}" y1="${y0}" y2="${y1}" stroke="#D9DEE5"/>`; });
-  if (ref != null) g += `<line x1="${x0}" x2="${x1}" y1="${Y(ref)}" y2="${Y(ref)}" stroke="#9AA5B1"/><text x="${x0 + 4}" y="${Y(ref) - 4}" font-size="9" fill="#6B7785">Fed target 2%</text>`;
+  if (ref != null) g += `<line x1="${x0}" x2="${x1}" y1="${Y(ref)}" y2="${Y(ref)}" stroke="#9AA5B1" stroke-dasharray="4 3"/><text x="${x0 + 4}" y="${Y(ref) - 4}" font-size="9" fill="#6B7785">${esc(o.refLabel || "Fed target 2%")}</text>`;
   const ends = [];
-  names.forEach((n, i) => { const o = series[n];
-    g += `<polyline fill="none" stroke="${MXL[i]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${o.map(p => X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join(" ")}"/>`;
-    const e = o[o.length - 1]; g += `<circle cx="${X(e[0])}" cy="${Y(e[1])}" r="4" fill="${MXL[i]}" stroke="#fff" stroke-width="2"/>`;
-    ends.push([Y(e[1]), e[1].toFixed(1) + "%", X(e[0])]); });
+  names.forEach((n, i) => { const ob = series[n];
+    g += `<polyline fill="none" stroke="${MXL[i]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${ob.map(p => X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join(" ")}"/>`;
+    const e = ob[ob.length - 1]; g += `<circle cx="${X(e[0])}" cy="${Y(e[1])}" r="4" fill="${MXL[i]}" stroke="#fff" stroke-width="2"/>`;
+    ends.push([Y(e[1]), (o.names ? n + " " : "") + fv(e[1]), X(e[0])]); });
   ends.sort((a, b) => a[0] - b[0]); for (let j = 1; j < ends.length; j++) if (ends[j][0] - ends[j - 1][0] < 12) ends[j][0] = ends[j - 1][0] + 12;
   ends.forEach(([y, t, x]) => g += `<text x="${x + 7}" y="${y + 4}" font-size="11" font-weight="700" fill="#1F2933">${t}</text>`);
   const hd = mxHover[key];
   if (hd) g += `<line x1="${X(hd)}" x2="${X(hd)}" y1="${y0}" y2="${y1}" stroke="#B5BDC8"/>`;
-  const t = mxTrend(series[names[0]]);
-  const read = hd ? `${mxPeriod(hd, "m")} · ` + names.map(n => { const p = series[n].find(q => q[0] == hd); return p ? `${n} ${p[1].toFixed(1)}%` : ""; }).filter(Boolean).join(" · ") : "Tap the chart to read a month.";
-  return `<div class="card mx-c"><div class="h">${esc(title)} ${mxTip(key)}</div>
+  const t = o.note == null ? mxTrend(series[names[0]]) : null;
+  const read = hd ? `${weekly ? "week to " + mxPeriod(hd, "d") : mxPeriod(hd, "m")} · ` + names.map(n => { const p = series[n].find(q => q[0] == hd); return p ? `${n} ${fv(p[1])}` : ""; }).filter(Boolean).join(" · ") : weekly ? "Tap the chart to read a week." : "Tap the chart to read a month.";
+  return `<div class="card mx-c"><div class="h">${esc(title)} ${mxTip(o.tip || key)}</div>
+    ${o.note ? `<p class="small" style="margin:0 0 4px">${esc(o.note)}</p>` : ""}
     ${t ? `<p class="small" style="margin:0 0 4px">${esc(names[0])} ${t[0]}: ${(t[1] >= 0 ? "+" : "") + t[1].toFixed(1)} pts in 6 months, ${(t[2] >= 0 ? "+" : "") + t[2].toFixed(1)} in 3</p>` : ""}
     <svg viewBox="0 0 ${W} ${H}" onclick="mxTap(event,'${key}',${x0},${x1},${W})" data-dates='${JSON.stringify(dates)}'>${g}</svg>
     ${names.length > 1 ? `<div class="leg">${names.map((n, i) => `<span><i style="background:${MXL[i]}"></i>${esc(n)}</span>`).join("")}</div>` : ""}
@@ -1458,6 +1461,54 @@ function mxTile(X, [key, label, freq, how, note]) {
   return `<div class="mx-t"${key == "expect" ? ' style="grid-column:1/-1"' : ""}><div class="l">${esc(label)} ${mxTip(key)}</div><div class="v">${esc(v)}</div>
     <div class="a">${esc(a)}</div>${b ? `<div class="b">${key == "expect" ? b : esc(b)}</div>` : ""}</div>`;
 }
+// ---------- markets (daily) and the week's releases: same reading as the PC's Macroeconomy page ----------
+const MX_RELEASE = {wei: "Thursdays", nfci: "Wednesdays 8:30", mortgage: "Thursdays 12:00", crude: "Wednesdays 10:30",
+                    gas: "Mondays", fedbs: "Thursdays 16:30"};
+const sg = (v, d) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
+const bp = d => sg(d * 100, 0) + " bp";
+function vixWord(v) { return v < 15 ? "calm" : v < 20 ? "normal" : v < 30 ? "nervous" : "fear"; }
+function mxT(key, label, v, lines, bad) {
+  return `<div class="mx-t"><div class="l">${esc(label)} ${mxTip(key)}</div><div class="v"${bad ? ' style="color:var(--bad)"' : ""}>${esc(v)}</div>
+    ${lines.filter(Boolean).map((l, i) => `<div class="${i ? "b" : "a"}">${esc(l)}</div>`).join("")}</div>`;
+}
+function marketsCard(X) {
+  const tiles = [["y2", "US 2-year"], ["y10", "US 10-year"], ["y30", "US 30-year"], ["curve", "10Y − 2Y curve"], ["vix", "VIX"]].map(([k, l]) => {
+    const r = X[k];
+    if (!r) return mxT(k, l, "—", ["not available"]);
+    const when = mxPeriod(r.date, "d"), ch = x => r[x] != null ? r.value - r[x] : null;
+    const parts = (list, f) => list.filter(([, d]) => d != null).map(([n, d]) => `${n} ${f(d)}`).join(" · ");
+    if (k == "vix") return mxT(k, l, r.value.toFixed(1), [`${vixWord(r.value)} · ${when}`,
+        parts([["day", ch("prev")], ["week", ch("week")], ["month", ch("month")]], d => sg(d, 1)),
+        r.lo52 != null ? `12-month range ${r.lo52.toFixed(1)}–${r.hi52.toFixed(1)}` : ""], r.value >= 30);
+    if (k == "curve") return mxT(k, l, sg(r.value, 2) + " pts", [(r.value < 0 ? "inverted: 2-year above 10-year" : "normal: 10-year above 2-year") + " · " + when,
+        parts([["week", ch("week")], ["month", ch("month")], ["year", ch("year")]], bp)], r.value < 0);
+    return mxT(k, l, r.value.toFixed(2) + "%", [when + (ch("prev") != null ? " · day " + bp(ch("prev")) : ""),
+        parts([["week", ch("week")], ["month", ch("month")], ["year", ch("year")]], bp)]);
+  });
+  const C = X.charts || {}, ten = X.y10, vx = X.vix;
+  const note = ten && ten.month != null && ten.year != null ? `10-year ${bp(ten.value - ten.month)} in a month, ${bp(ten.value - ten.year)} in a year` : "";
+  return `<div class="card"><div class="h">Markets</div><p class="small muted" style="margin:-4px 0 8px">Treasury yields and the VIX · daily, last close</p>
+      <div class="mx-tiles">${tiles.join("")}</div></div>
+    ${C.yields ? mxChart("yields", "Treasury yields, last 12 months", C.yields, null, {digits: 2, freq: "w", names: true, tip: "Yields", note}) : ""}
+    ${C.vix ? mxChart("vixc", "VIX, last 12 months", C.vix, 20, {unit: "", freq: "w", refLabel: "long-run average ~20", tip: "VIX", note: vx ? `Now ${vixWord(vx.value)} (${vx.value.toFixed(1)})` : ""}) : ""}`;
+}
+function weeklyCard(X) {
+  const tiles = [["wei", "Weekly Economic Index"], ["nfci", "Financial conditions"], ["mortgage", "30-year mortgage"],
+                 ["crude", "Crude oil stocks"], ["gas", "Gasoline"], ["fedbs", "Fed balance sheet"]].map(([k, l]) => {
+    const r = X[k];
+    if (!r) return mxT(k, l, "—", ["not available"]);
+    const p = r.prev, d = p != null ? r.value - p : null, arrow = d == null ? "" : d > 0 ? "▲ " : d < 0 ? "▼ " : "= ";
+    const out = `out ${MX_RELEASE[k]} (US time)`, when = mxPeriod(r.date, "w");
+    if (k == "wei") return mxT(k, l, sg(r.value, 2) + "%", [when, p != null ? arrow + "was " + sg(p, 2) + "%" : "", "≈ real GDP growth on the year", r.avg4 != null ? "4-week average " + sg(r.avg4, 2) + "%" : "", out]);
+    if (k == "nfci") return mxT(k, l, sg(r.value, 2), [when, p != null ? arrow + "was " + sg(p, 2) : "", r.value < 0 ? "looser than average" : "tighter than average", out], r.value > 0);
+    if (k == "mortgage") return mxT(k, l, r.value.toFixed(2) + "%", [when, p != null ? arrow + "was " + p.toFixed(2) + "%" : "", out]);
+    if (k == "crude") return mxT(k, l, (r.value / 1e3).toFixed(1) + "M bbl", [when, d ? `${d > 0 ? "build" : "draw"} ${(Math.abs(d) / 1e3).toFixed(1)}M bbl in the week` : "", out]);
+    if (k == "gas") return mxT(k, l, "$" + r.value.toFixed(2) + "/gal", [when, p != null ? arrow + "was $" + p.toFixed(2) : "", out]);
+    return mxT(k, l, "$" + (r.value / 1e6).toFixed(2) + "T", [when, d ? `${d > 0 ? "+" : "−"}$${Math.round(Math.abs(d) / 1e3)}B in the week (${d > 0 ? "growing" : "shrinking"})` : "", out]);
+  });
+  return `<div class="card"><div class="h">This week's data</div><p class="small muted" style="margin:-4px 0 8px">The figures that come out every week · jobless claims (Thursdays) are under Jobs</p>
+    <div class="mx-tiles">${tiles.join("")}</div></div>`;
+}
 function macroPage() {
   const X = D && D.macro;
   if (!X) return `<div class="empty">No macro data yet.<br>Open Macroeconomy on the PC, then Sync with phone.</div>`;
@@ -1472,11 +1523,13 @@ function macroPage() {
   const C = X.charts || {};
   return `<div class="card"><div class="h">Macroeconomy · United States</div>${meet}</div>
     ${gcard}
+    ${X.y10 || X.vix ? marketsCard(X) : ""}
+    ${X.wei || X.mortgage ? weeklyCard(X) : ""}
     ${mxChart("cpi", "Inflation: CPI, year on year", C.cpi || {}, 2)}
     ${mxChart("pce", "Inflation: PCE, year on year", C.pce || {}, 2)}
     ${mxChart("unrate", "Unemployment rate", C.unrate || {}, null)}
     ${MX_TILES.map(([g, items]) => `<div class="card"><div class="h">${g}</div><div class="mx-tiles">${items.map(t => mxTile(X, t)).join("")}</div></div>`).join("")}
-    <p class="note" style="text-align:center">From the PC's last Sync (figures of ${esc(X.when || "")}).<br>Source: FRED, Federal Reserve Bank of St. Louis. Market expects: Tarsier's reading of 30-day fed funds futures.</p>`;
+    <p class="note" style="text-align:center">From the PC's last Sync (figures of ${esc(X.when || "")}).<br>Source: FRED, Federal Reserve Bank of St. Louis (yields: U.S. Treasury; VIX: CBOE; weekly: Dallas Fed, Chicago Fed, Freddie Mac, EIA, Federal Reserve). Market expects: Tarsier's reading of 30-day fed funds futures.</p>`;
 }
 
 function method() {
