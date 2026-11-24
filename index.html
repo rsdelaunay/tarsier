@@ -1413,10 +1413,6 @@ function ecQL(q) { return q ? `FY${q.slice(0, 4)} Q${q[5]}` : "—"; }
 // Alpha Vantage's free key: at most one request a second, or it answers "Thank you for using…" instead of the data.
 // So: wait between requests, and ask again (up to 3 times). The daily limit and premium-only answers are real refusals.
 let avLast = 0;
-const AV_DAILY = 25;           // free requests a day; a call read costs 2 (up to 4), a saved call costs nothing
-function avDay() { return new Date().toISOString().slice(0, 10); }           // the count restarts at 00:00 UTC
-function avUsed() { const c = LS.get("tarsier.avcount", {}); return c.day == avDay() ? c.n || 0 : 0; }
-function avCount(n) { LS.set("tarsier.avcount", {day: avDay(), n: n == null ? avUsed() + 1 : n}); }
 const AV_GAP = 1500, sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function avOnce(t, q, key) {
   const qs = `function=EARNINGS_CALL_TRANSCRIPT&symbol=${encodeURIComponent(t)}&quarter=${q}&apikey=${encodeURIComponent(key)}`;
@@ -1434,13 +1430,11 @@ async function avJSON(t, q, key) {
     const wait = avLast + AV_GAP * (i + 1) - Date.now();
     if (wait > 0) await sleep(wait);
     avLast = Date.now();
-    if (avUsed() >= AV_DAILY) throw new Error(`The ${AV_DAILY} free requests of today are used up on this phone. Saved calls still open; new ones tomorrow (the count restarts at 00:00 UTC).`);
-    avCount();
     try { return await avOnce(t, q, key); }
     catch (e) {
       const m = (e.message || "").toLowerCase(), daily = m.includes("per day") || m.includes("daily") || (m.includes("premium") && !m.includes("second"));
-      if (daily) avCount(AV_DAILY);
-      if (!e.limit || daily || i == 2) throw e;
+      if (daily) throw new Error("No free requests left today: the free key allows 25 a day. Calls already saved still open; try again tomorrow.");
+      if (!e.limit || i == 2) throw e;
     }
   }
 }
@@ -1502,11 +1496,9 @@ function callCard(c) {
   if (!r && have.length && !ECBUSY[t] && !ECMSG[t]) setTimeout(() => ecShow(t, have[0]), 0);
   const head = `<div class="h">Earnings call${r ? " · " + ecQL(r.quarter) : ""} ${tipPts("ec-" + t, ["Read with fixed rules, no AI (the PC's)", "Tone: finance word lists (Loughran-McDonald), −1 to +1",
       "Guidance: forward-looking sentences with a number", "Vague answer: a dodging phrase, or a long hedged answer without a number", "The transcript stays on this phone"])}</div>`;
-  const btn = `<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="pbtn" style="margin:0" ${ECBUSY[t] || avUsed() >= AV_DAILY ? "disabled" : ""} onclick="ecGo('${t}')">${ECBUSY[t] ? "Working…" : "↻ Get the latest call"}</button>
+  const btn = `<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="pbtn" style="margin:0" ${ECBUSY[t] ? "disabled" : ""} onclick="ecGo('${t}')">${ECBUSY[t] ? "Working…" : "↻ Get the latest call"}</button>
       ${have.length > 1 ? `<select class="msel" onchange="this.value && ecShow('${t}', this.value)"><option value="">Saved calls</option>${have.map(q => `<option value="${q}">${ecQL(q)}</option>`).join("")}</select>` : ""}</div>`;
-  const used = avUsed(), left = Math.max(AV_DAILY - used, 0);
-  const quota = `<p class="tiny" style="margin:6px 0 0;color:${left <= 4 ? "var(--bad)" : "var(--muted)"}">Alpha Vantage today: ${used} of ${AV_DAILY} free requests used · ${left} left ${tipPts("avq-" + t, [`Alpha Vantage's free key: ${AV_DAILY} requests a day`, "Get the latest call uses 2 (sometimes up to 4, when the newest quarter is not out yet)", "Calls already saved open for free", "Counted on this phone; the PC keeps its own count, but the key's limit is shared", "The count restarts at 00:00 UTC (00:00 in Lisbon in winter)"])}</p>`;
-  const msg = quota + (ECMSG[t] ? `<p class="note">${esc(ECMSG[t])}</p>` : "");
+  const msg = ECMSG[t] ? `<p class="note">${esc(ECMSG[t])}</p>` : "";
   if (!r) return `<div class="card">${head}<p class="small muted">${LS.get("tarsier.av", "") ? "Fetches the latest call and the one before (2 of the 25 free Alpha Vantage requests a day), and reads them like the PC." : "Add your free Alpha Vantage key in Settings → Earnings calls."}</p>${btn}${msg}</div>`;
   const tn = r.tone, v = r.vs, vague = r.qa.filter(x => x.vague).length;
   const cnt = k => r.guidance.filter(g => g.direction == k).length;
