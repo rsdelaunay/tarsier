@@ -199,6 +199,16 @@ tr.w td{font-weight:700}
 .mx-t .l{font-size:11px;font-weight:700;color:var(--muted)}
 .mx-t .v{font-size:19px;font-weight:700}
 .mx-t .a,.mx-t .b{font-size:11px;color:var(--muted);line-height:1.3}
+.ec-tx{font-size:15px;line-height:1.5;text-align:justify;max-height:70vh;overflow-y:auto;background:#FCFCFD;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.ec-tx .who{font-weight:700;margin:14px 0 2px;text-align:left}.ec-tx .who.management{color:var(--navy)}.ec-tx .who.analyst{color:#7A4FB5}.ec-tx .who.operator{color:var(--muted);font-size:13px}
+.ec-tx .ttl{font-weight:400;color:var(--muted);font-size:12px;margin-left:6px}.ec-tx .op{color:var(--muted);font-size:13px;margin:0}
+.ec-tx .sec{color:var(--gold);font-weight:700;margin:16px 0 4px;text-align:left}.ec-tx p{margin:0}
+.ec-tx b{font-weight:700}.ec-tx .g{background:#FFF3B8}.ec-tx .hd{color:#9A6B00;font-style:italic}.ec-tx .dg{color:var(--bad);text-decoration:underline}
+.ec-tx .vg{color:var(--bad);font-size:12px;font-weight:700;margin-left:6px}
+.ec-dir{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;margin-right:6px}
+.ec-g{margin:6px 0;font-size:14px;line-height:1.4}
+.ec-views{display:flex;gap:6px;margin:4px 0 8px}.ec-views button{border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:5px 11px;font:600 12px inherit;font-family:inherit;color:var(--ink)}
+.ec-views button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .mx-i{color:var(--muted);font-weight:700;cursor:pointer;padding:0 2px;text-transform:none;letter-spacing:0}
 .mx-tip{text-transform:none;letter-spacing:0;font-weight:400}
 .mx-tip{font-size:12px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:5px;color:var(--ink)}
@@ -793,6 +803,8 @@ function company(t) {
         v.reconcile && v.reconcile.length ? `<p class="note">Why the two values differ: ${esc(v.reconcile.join(" "))}</p>` : ""}</div>`;
   }
 
+  html += callCard(c);
+
   const b = c.business;
   if (b) {
     const P = {health: "Financial health", margins: "Margins vs peers", share: "Market share", tam: "Market growth", moat: "Moat"};
@@ -1352,6 +1364,12 @@ function settingsPage() {
     <div class="row2"><button onclick="savePass(document.getElementById('ppw').value)">Save passphrase</button>
       ${LS.get("tarsier.pass", "") ? `<button onclick="savePass('')" style="background:var(--soft);color:var(--bad)">Remove</button>` : ""}</div>
     ${privMsg ? `<p class="note">${esc(privMsg)}</p>` : ""}</div>
+  <div class="card set"><div class="h">Earnings calls</div>
+    <p class="small">Your free Alpha Vantage key (the same as on the PC works): 25 requests a day, each call read uses 1–2. The phone fetches the transcript itself and keeps it on this phone only.</p>
+    <input id="avk" type="password" placeholder="${LS.get("tarsier.av", "") ? "Key saved · paste a new one to replace it" : "Alpha Vantage key"}" autocomplete="off">
+    <div class="row2"><button onclick="saveAV(document.getElementById('avk').value)">Save key</button>
+      ${LS.get("tarsier.av", "") ? `<button onclick="saveAV('')" style="background:var(--soft);color:var(--bad)">Remove</button>` : ""}</div>
+    ${avMsg ? `<p class="note">${esc(avMsg)}</p>` : ""}</div>
   <div class="card set"><div class="h">Live prices</div>
     <p class="small">From Yahoo Finance through your relay, kept 15 minutes. ${npx} saved now.</p>
     <div class="row2"><button onclick="clearPrices()" style="background:var(--soft);color:var(--navy)">Refresh all prices</button></div>
@@ -1360,6 +1378,135 @@ function settingsPage() {
     <p class="small">Grades from the PC: ${D ? esc(D.generated) : "none yet"}<br>Tarsier Research ${D ? "v" + esc(D.version) + " · method " + esc(D.method) : ""}</p>
     <div class="row2"><button onclick="reloadApp()" style="background:var(--soft);color:var(--navy)">Reload the app</button></div>
     <p class="note">After a change on GitHub, Reload gets the newest version (the engine download is kept).</p></div>`;
+}
+
+// ---------- Earnings call: fetched by this phone from Alpha Vantage, read with the PC's rules (calls.py) ----------
+// The transcript stays on this phone (localStorage): it is never sent to GitHub or the PC.
+let avMsg = "", EC = {}, ECBUSY = {}, ECMSG = {}, ECVIEW = "all", ECOPEN = {};
+const AV = "https://www.alphavantage.co/query";
+const ecS = (v, d) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
+function saveAV(v) { LS.set("tarsier.av", (v || "").trim()); avMsg = v && v.trim() ? "Saved on this phone only." : "Key removed from this phone."; route(); }
+function ecStore() { return LS.get("tarsier.calls", {}); }
+function ecGet(t, q) { return (ecStore()[t] || {})[q] || null; }
+function ecPut(rec) {
+  const all = ecStore(); (all[rec.ticker] = all[rec.ticker] || {})[rec.quarter] = rec;
+  // keep the phone light: at most 12 calls with a transcript, the oldest go first
+  const list = Object.values(all).flatMap(o => Object.values(o)).filter(r => r.turns && r.turns.length).sort((a, b) => a.fetched - b.fetched);
+  while (list.length > 12) { const r = list.shift(); delete all[r.ticker][r.quarter]; }
+  if (!LS.set("tarsier.calls", all)) LS.set("tarsier.calls", {[rec.ticker]: {[rec.quarter]: rec}});   // phone storage full: keep this one
+}
+function ecPrev(q) { const y = +q.slice(0, 4), n = +q[5]; return n == 1 ? `${y - 1}Q4` : `${y}Q${n - 1}`; }
+function ecQL(q) { return q ? `FY${q.slice(0, 4)} Q${q[5]}` : "—"; }
+async function avJSON(t, q, key) {
+  const qs = `function=EARNINGS_CALL_TRANSCRIPT&symbol=${encodeURIComponent(t)}&quarter=${q}&apikey=${encodeURIComponent(key)}`;
+  let r;
+  try { r = await fetch(`${AV}?${qs}`); }
+  catch (e) { r = await fetch(`${RELAY}/av/${encodeURIComponent(t)}/${q}/${encodeURIComponent(key)}`); }   // if the browser may not read it directly
+  if (!r.ok) throw new Error(`Alpha Vantage answered ${r.status}`);
+  const j = await r.json();
+  const lim = j && (j.Information || j.Note || j["Error Message"]);
+  if (lim) throw new Error(String(lim).slice(0, 240));
+  return j;
+}
+async function ecFetch(t, q, key, force) {
+  const have = ecGet(t, q);
+  if (have && !force && (have.turns.length || Date.now() - have.fetched < 7 * 864e5)) return have.turns.length ? have : null;
+  const j = await avJSON(t, q, key);
+  const turns = (j.transcript || []).filter(x => (x.content || "").trim()).map(x => ({speaker: (x.speaker || "").trim(), title: (x.title || "").trim(),
+    text: x.content.trim(), av_sentiment: x.sentiment === "" || x.sentiment == null ? null : +x.sentiment}));
+  const rec = {ticker: t, quarter: q, source: "Alpha Vantage", fetched: Date.now(), turns};
+  ecPut(rec);
+  return turns.length ? rec : null;
+}
+async function ecRead(t, q) {
+  const call = ecGet(t, q), prev = ecGet(t, ecPrev(q));
+  const py = await engine(m => { ECMSG[t] = m; route(); });
+  py.globals.set("C_", JSON.stringify(call)); py.globals.set("P_", prev && prev.turns.length ? JSON.stringify(prev) : null);
+  EC[t] = JSON.parse(py.runPython("phone_engine.call_reading(C_, P_)"));
+}
+async function ecGo(t) {
+  const key = LS.get("tarsier.av", "");
+  if (!key) { ECMSG[t] = "Add your free Alpha Vantage key in Settings → Earnings calls."; route(); return; }
+  const c = allCos().find(x => x.ticker == t); if (!c || ECBUSY[t]) return;
+  ECBUSY[t] = true; ECMSG[t] = "Getting the call…"; route();
+  try {
+    const py = await engine(m => { ECMSG[t] = m; route(); });
+    py.globals.set("L_", c.latest.label); py.globals.set("E_", c.latest.end);
+    const order = JSON.parse(py.runPython("phone_engine.call_quarters(L_, E_)"));
+    let got = null;
+    for (const q of order) { ECMSG[t] = `Asking Alpha Vantage for ${t} ${ecQL(q)}…`; route(); got = await ecFetch(t, q, key); if (got) break; }
+    if (!got) { ECMSG[t] = `Alpha Vantage has no transcript for ${t}'s latest quarters yet. Transcripts usually appear a day or two after the call.`; return; }
+    try { ECMSG[t] = "Getting the call before, for the comparison…"; route(); await ecFetch(t, ecPrev(got.quarter), key); } catch (e) {}
+    await ecRead(t, got.quarter); ECMSG[t] = "";
+  } catch (e) { ECMSG[t] = "Could not get the call: " + (e.message || e); }
+  finally { ECBUSY[t] = false; route(); }
+}
+async function ecShow(t, q) { ECBUSY[t] = true; route(); try { await ecRead(t, q); ECMSG[t] = ""; } catch (e) { ECMSG[t] = String(e.message || e); } ECBUSY[t] = false; route(); }
+function ecQuarters(t) { return Object.values(ecStore()[t] || {}).filter(r => r.turns && r.turns.length).map(r => r.quarter).sort().reverse(); }
+function tipPts(key, list) {
+  return `<span class="mx-i" onclick="event.stopPropagation();mxOpen=mxOpen=='${key}'?null:'${key}';route()">ⓘ</span>${mxOpen == key ? `<div class="mx-tip" style="font-weight:400;text-transform:none;letter-spacing:0"><ul style="margin:0;padding-left:16px">${list.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}`;
+}
+function ecMarked(text, marks, kinds) {
+  // the PC's marks: numbers bold, guidance yellow, hedging amber italics, dodges red underline
+  const cls = {number: "b", guidance: "g", hedge: "hd", dodge: "dg"};
+  const ev = [];
+  marks.filter(m => kinds.includes(m[2])).forEach(([a, b, k], i) => { ev.push([a, 1, i, k]); ev.push([b, 0, i, k]); });
+  const cuts = [...new Set([0, text.length, ...ev.map(e => e[0])])].sort((a, b) => a - b);
+  let out = "";
+  for (let j = 0; j < cuts.length - 1; j++) {
+    const a = cuts[j], b = cuts[j + 1], on = marks.filter(m => kinds.includes(m[2]) && m[0] <= a && m[1] >= b).map(m => cls[m[2]]);
+    const piece = esc(text.slice(a, b));
+    out += on.length ? `<span class="${[...new Set(on)].join(" ")}">${on.includes("b") ? "<b>" + piece + "</b>" : piece}</span>` : piece;
+  }
+  return out;
+}
+function ecView(v) { ECVIEW = v; route(); }
+function callCard(c) {
+  const t = c.ticker, r = EC[t] && EC[t].ticker == t ? EC[t] : null, have = ecQuarters(t);
+  if (!r && have.length && !ECBUSY[t] && !ECMSG[t]) setTimeout(() => ecShow(t, have[0]), 0);
+  const head = `<div class="h">Earnings call${r ? " · " + ecQL(r.quarter) : ""} ${tipPts("ec-" + t, ["Read with fixed rules, no AI (the PC's)", "Tone: finance word lists (Loughran-McDonald), −1 to +1",
+      "Guidance: forward-looking sentences with a number", "Vague answer: a dodging phrase, or a long hedged answer without a number", "The transcript stays on this phone"])}</div>`;
+  const btn = `<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="pbtn" style="margin:0" ${ECBUSY[t] ? "disabled" : ""} onclick="ecGo('${t}')">${ECBUSY[t] ? "Working…" : "↻ Get the latest call"}</button>
+      ${have.length > 1 ? `<select class="msel" onchange="this.value && ecShow('${t}', this.value)"><option value="">Saved calls</option>${have.map(q => `<option value="${q}">${ecQL(q)}</option>`).join("")}</select>` : ""}</div>`;
+  const msg = ECMSG[t] ? `<p class="note">${esc(ECMSG[t])}</p>` : "";
+  if (!r) return `<div class="card">${head}<p class="small muted">${LS.get("tarsier.av", "") ? "Fetches the latest call and the one before (2 of the 25 free Alpha Vantage requests a day), and reads them like the PC." : "Add your free Alpha Vantage key in Settings → Earnings calls."}</p>${btn}${msg}</div>`;
+  const tn = r.tone, v = r.vs, vague = r.qa.filter(x => x.vague).length;
+  const cnt = k => r.guidance.filter(g => g.direction == k).length;
+  const tiles = `<div class="tiles">
+      <div class="tile"><div class="k">TONE</div><div class="v ${tn.net >= 0.3 ? "up" : tn.net < -0.1 ? "down" : ""}">${ecS(tn.net, 2)}</div><div class="s">${esc(r.tone_word)}${v ? " · was " + ecS(v.before.net, 2) : ""}</div></div>
+      <div class="tile"><div class="k">UNCERTAINTY</div><div class="v">${tn.uncertainty_k.toFixed(1)}</div><div class="s">per 1,000 words${v ? " · was " + v.before.uncertainty_k.toFixed(1) : ""}</div></div>
+      <div class="tile"><div class="k">GUIDANCE</div><div class="v">${r.guidance.length}</div><div class="s">${["raised", "lowered"].filter(k => cnt(k)).map(k => cnt(k) + " " + k).join(" · ") || "statements"}</div></div>
+      <div class="tile"><div class="k">QUESTIONS</div><div class="v ${vague ? "down" : ""}">${r.qa.length}</div><div class="s">${vague} vague</div></div></div>`;
+  const DIR = {raised: ["▲ Raised", "var(--ok)", "#E3F1E6"], lowered: ["▼ Lowered", "var(--bad)", "#FBE7E5"], reaffirmed: ["● Reaffirmed", "var(--blue)", "#E8F0FE"], outlook: ["Outlook", "var(--muted)", "var(--soft)"]};
+  const ord = {lowered: 0, raised: 1, reaffirmed: 2, outlook: 3};
+  const guid = r.guidance.length ? [...r.guidance].sort((a, b) => ord[a.direction] - ord[b.direction]).map(g => { const [l, fg, bg] = DIR[g.direction];
+      return `<div class="ec-g"><span class="ec-dir" style="color:${fg};background:${bg}">${l}</span>${ecMarked(g.text, g.marks || [], ["number"])} <span class="tiny muted">— ${esc(g.speaker)}</span></div>`; }).join("")
+    : `<p class="small muted">No forward-looking sentence with a number in this call.</p>`;
+  const before = v ? Object.fromEntries(v.topics.map(x => [x.topic, x])) : {};
+  const topics = Object.entries(r.topics).filter(([k, x]) => x.hits || before[k]).sort((a, b) => b[1].per_k - a[1].per_k).map(([k, x]) => { const bf = before[k], ch = bf ? bf.change : null;
+      return `<tr><td><b>${esc(k)}</b></td><td>${x.per_k.toFixed(1)}</td>${v ? `<td>${bf ? bf.before.toFixed(1) : ""}</td><td class="${ch > 0.5 ? "up" : ch < -0.5 ? "down" : "muted"}">${ch == null ? "" : (ch > 0.5 ? "▲ " : ch < -0.5 ? "▼ " : "") + ecS(ch, 1)}</td>` : ""}</tr>`; }).join("");
+  const phrases = v && (v.new_phrases.length || v.gone_phrases.length) ? pointers([v.new_phrases.length ? "New this call: " + v.new_phrases.map(([p, n]) => `“${p}” (${n})`).join(", ") : "",
+      v.gone_phrases.length ? "Gone since last call: " + v.gone_phrases.map(([p]) => `“${p}”`).join(", ") : ""].filter(Boolean)) : "";
+  const vg = {};
+  r.qa.forEach(q => { if (q.vague && q.answer_turns.length) vg[q.answer_turns[0]] = q.dodge ? `⚠ vague answer: “${q.dodge}”` : "⚠ vague answer: long, hedged, no number"; });
+  let tx = "", sec = null;
+  r.turns.forEach((x, n) => {
+    if (ECVIEW != "all" && x.section != ECVIEW) return;
+    if (x.section != sec) { sec = x.section; tx += `<div class="sec">${sec == "prepared" ? "Prepared remarks" : "Questions and answers"}</div>`; }
+    tx += `<div class="who ${x.role}">${esc(x.speaker || "—")}${x.title && x.title.toLowerCase() != (x.speaker || "").toLowerCase() ? `<span class="ttl">${esc(x.title)}</span>` : ""}${vg[n] ? `<span class="vg">${esc(vg[n])}</span>` : ""}</div>`;
+    tx += x.role == "operator" ? `<p class="op">${esc(x.text)}</p>` : `<p>${ecMarked(x.text, x.marks, x.role == "management" ? ["number", "guidance", "hedge", "dodge"] : ["number"])}</p>`;
+  });
+  const mg = r.speakers.filter(s => s.role == "management").slice(0, 3).map(s => `${s.name} (${s.title})`).join(" · ");
+  return `<div class="card">${head}<p class="tiny muted" style="margin:-4px 0 8px">${esc(mg)} · ${tn.words.toLocaleString("en")} words · source: Alpha Vantage</p>
+      ${tiles}${btn}${msg}
+      ${v ? "" : `<p class="note">No ${ecQL(ecPrev(r.quarter))} call saved: the comparison appears once the call before is fetched too.</p>`}
+      ${pointers(r.points, "What stands out")}</div>
+    <div class="card"><div class="h">Guidance and outlook ${tipPts("ecg-" + t, ["Every management sentence that looks ahead and has a number", "Raised / lowered / reaffirmed: from the words around it"])}</div>${guid}</div>
+    <div class="card"><div class="h">What they talked about ${tipPts("ect-" + t, ["Mentions per 1,000 words, this call against the one before", "New phrases: two-word phrases that appear far more than last time"])}</div>
+      <table><tr><th>Topic</th><th>This call</th>${v ? "<th>Before</th><th>Change</th>" : ""}</tr>${topics}</table>${phrases}</div>
+    <div class="card"><div class="h">Transcript ${tipPts("ecx-" + t, ["Bold: numbers", "Yellow: forward-looking sentences with a number", "Amber italics: hedging", "Red underline: dodging phrases", "⚠ vague answer: it dodged, or was long, hedged and without a number"])}</div>
+      <div class="ec-views">${[["all", "Whole call"], ["prepared", "Prepared"], ["qa", "Q&A"]].map(([k, l]) => `<button class="${ECVIEW == k ? "on" : ""}" onclick="ecView('${k}')">${l}</button>`).join("")}</div>
+      <div class="ec-tx">${tx}</div></div>`;
 }
 
 // ---------- Macroeconomy: what the PC sent at its last Sync (FRED, fed funds futures) ----------
