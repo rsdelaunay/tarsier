@@ -1410,7 +1410,11 @@ function ecPut(rec) {
 }
 function ecPrev(q) { const y = +q.slice(0, 4), n = +q[5]; return n == 1 ? `${y - 1}Q4` : `${y}Q${n - 1}`; }
 function ecQL(q) { return q ? `FY${q.slice(0, 4)} Q${q[5]}` : "—"; }
-async function avJSON(t, q, key) {
+// Alpha Vantage's free key: at most one request a second, or it answers "Thank you for using…" instead of the data.
+// So: wait between requests, and ask again (up to 3 times). The daily limit and premium-only answers are real refusals.
+let avLast = 0;
+const AV_GAP = 1500, sleep = ms => new Promise(ok => setTimeout(ok, ms));
+async function avOnce(t, q, key) {
   const qs = `function=EARNINGS_CALL_TRANSCRIPT&symbol=${encodeURIComponent(t)}&quarter=${q}&apikey=${encodeURIComponent(key)}`;
   let r;
   try { r = await fetch(`${AV}?${qs}`); }
@@ -1418,8 +1422,20 @@ async function avJSON(t, q, key) {
   if (!r.ok) throw new Error(`Alpha Vantage answered ${r.status}`);
   const j = await r.json();
   const lim = j && (j.Information || j.Note || j["Error Message"]);
-  if (lim) throw new Error(String(lim).slice(0, 240));
+  if (lim) { const e = new Error(String(lim).slice(0, 240)); e.limit = true; throw e; }
   return j;
+}
+async function avJSON(t, q, key) {
+  for (let i = 0; i < 3; i++) {
+    const wait = avLast + AV_GAP * (i + 1) - Date.now();
+    if (wait > 0) await sleep(wait);
+    avLast = Date.now();
+    try { return await avOnce(t, q, key); }
+    catch (e) {
+      const m = (e.message || "").toLowerCase(), daily = m.includes("per day") || m.includes("daily") || (m.includes("premium") && !m.includes("second"));
+      if (!e.limit || daily || i == 2) throw e;
+    }
+  }
 }
 async function ecFetch(t, q, key, force) {
   const have = ecGet(t, q);
