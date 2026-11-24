@@ -74,6 +74,9 @@ table.cmp .qtag{font-size:8.5px;font-weight:700;letter-spacing:.3px;color:#8A5A0
 .summary{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 10px}
 .sorts button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 10px;font:600 12px inherit;color:var(--ink);margin-left:4px}
 .sorts button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.ctabs{display:flex;gap:4px;margin:0 0 10px;position:sticky;top:56px;z-index:4;background:var(--bg);padding:6px 0}
+.ctabs button{flex:1;border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 4px;font:700 12px inherit;font-family:inherit;color:var(--ink)}
+.ctabs button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .co{display:flex;gap:12px;align-items:center;cursor:pointer}
 .co .badge{width:48px;height:48px;font-size:20px;flex:none}
 .co .mid{flex:1;min-width:0}
@@ -742,7 +745,15 @@ function quarters(c) {
       ${h.preliminary ? '<span class="chip pre">PRELIMINARY</span>' : ""}</div>${t}</div>`;
 }
 
-function company(t) {
+// a company has its own tabs, like the PC: the grade, projections, the earnings call, and Compare
+const CTABS = [["grade", "Grade"], ["proj", "Projections"], ["call", "Earnings call"], ["cmp", "Compare"]];
+function cTab(t, k) {
+  if (k == "cmp") { cmpWith(t); return; }
+  history.replaceState(null, "", `#/c/${t}/${k}`);    // no extra step for the Back button
+  route(); window.scrollTo(0, 0);
+}
+function company(t, sub) {
+  sub = ["grade", "proj", "call"].includes(sub) ? sub : "grade";
   const c = allCos().find(x => x.ticker == t);
   if (!c) return `<div class="empty">Not found.</div>`;
   if (selT != t) { selT = t; selQ = null; }
@@ -756,8 +767,12 @@ function company(t) {
       <div><div class="t">${esc(c.ticker)}</div><div class="small muted">${esc(c.name)}</div>
       <div class="small">${esc(q.label)} · <b>${q.score ?? "n/a"}</b> / 100 ${quickChip(c)}${chips(q)}</div></div></div>
       ${quickOf(c) ? `<p class="note">Quick look: graded automatically from the SEC filings${quickOf(c).source == "phone" ? (graded(c.ticker) ? " after you looked it up on the phone" : " on this phone, with the same engine as the PC") : ""}, with default projections and no execution inputs. Grade it on the PC (Companies → Check SEC and grade) to make it yours.</p>` : ""}
-      <div class="facts">${facts.map(s => `<span>${esc(s)}</span>`).join("")}</div>
-      ${c.compare ? `<button class="cmpbtn" onclick="cmpWith('${c.ticker}')">Compare with others →</button>` : ""}</div>`;
+      ${sub == "grade" ? `<div class="facts">${facts.map(s => `<span>${esc(s)}</span>`).join("")}</div>` : ""}</div>
+    <div class="ctabs">${CTABS.filter(([k]) => k != "cmp" || c.compare).map(([k, l]) => `<button class="${k == sub ? "on" : ""}" onclick="cTab('${c.ticker}','${k}')">${l}${k == "cmp" ? " →" : ""}</button>`).join("")}</div>`;
+
+  if (sub == "call") return html + callCard(c) + `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
+  if (sub == "proj") return html + (v ? valuationCard(c, v, q) : `<div class="empty">No projection for ${esc(c.ticker)} yet.<br>Open it on the PC (2 · Projections), then Sync.</div>`)
+    + `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
 
   html += quarters(c);
 
@@ -770,7 +785,21 @@ function company(t) {
       <div class="tile"><div class="k">RETURNED</div><div class="v">${money((u.buybacks || 0) + (u.dividends || 0))}</div><div class="s">buybacks ${money(u.buybacks || 0)} · dividends ${money(u.dividends || 0)}</div></div>
     </div>${q.cash_points ? pointers(q.cash_points, "Where the cash went") : `<p class="note">${esc(f.verdict)}</p>`}${riskBox(q.holder_risks)}</div>`;
 
-  if (v) {
+  const b = c.business;
+  if (b) {
+    const P = {health: "Financial health", margins: "Margins vs peers", share: "Market share", tam: "Market growth", moat: "Moat"};
+    html += `<div class="card"><div class="h">The business ${b.grade ? `· <span style="color:${gcol(b.grade)}">${b.grade}</span>` : ""}</div>
+      ${b.hq ? `<p class="small muted">${esc(b.hq)}${b.industry ? " · " + esc(b.industry) : ""}</p>` : ""}
+      ${Object.entries(P).map(([k, l]) => { const p = b.pillars[k] || {}; return `<div class="blk" style="cursor:default"><div class="top">
+        <span class="name" style="width:128px">${l.toUpperCase()}</span><span class="bar"><i style="width:${p.score ?? 0}%;background:${scol(p.score)}"></i></span>
+        <span class="val">${p.score ?? "—"}</span></div><div class="tiny muted" style="margin-top:3px">${esc(p.note || "")}</div></div>`; }).join("")}
+      ${b.grade ? "" : `<p class="note">${b.filled} of 5 pillars filled: the business grade appears when all five are in.</p>`}</div>`;
+  }
+  html += `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
+  return html;
+}
+
+function valuationCard(c, v, q) {
     const yrs = v.target_years, ms = v.methods || [];
     const pc = ms.find(m => m.current), sug = ms.find(m => m.suggested);
     const M = ms.find(m => m.code == MPICK[c.ticker]) || pc;          // the method shown: picked here, else the PC's
@@ -786,7 +815,7 @@ function company(t) {
           ${ms.map(m => `<option value="${m.code}">${m.code == M.code ? "✓ " : ""}${esc(m.label)}${m.suggested ? " · suggested" : ""}</option>`).join("")}
         </select></div>
       ${v.business_model ? `<p class="tiny muted" style="margin:4px 0 0">Business model: ${esc(v.business_model)}${M.code != sug.code ? " · your choice, on this phone only" : ""}</p>` : ""}` : "";
-    html += `<div class="card"><div class="h">Fair value · after a ${v.margin_of_safety}% margin of safety</div>${picker}
+    return `<div class="card"><div class="h">Fair value · after a ${v.margin_of_safety}% margin of safety</div>${picker}
       <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""} ${spTip}</div><div class="v">${usd(fv)}</div>
         <div class="tiny ${up == null ? "muted" : up >= 0 ? "up" : "down"}">${up == null ? "no price saved" : pct(up, 1) + " vs " + usd(v.price)}</div></div>
         <div><div class="k">BY FREE CASH FLOW</div><div class="v">${usd(v.dcf_value)}</div>
@@ -802,22 +831,6 @@ function company(t) {
       ${v.why_points && v.why_points.length ? pointers(v.why_points, "Why the two values differ") :
         v.reconcile && v.reconcile.length ? `<p class="note">Why the two values differ: ${esc(v.reconcile.join(" "))}</p>` : ""}</div>`;
   }
-
-  html += callCard(c);
-
-  const b = c.business;
-  if (b) {
-    const P = {health: "Financial health", margins: "Margins vs peers", share: "Market share", tam: "Market growth", moat: "Moat"};
-    html += `<div class="card"><div class="h">The business ${b.grade ? `· <span style="color:${gcol(b.grade)}">${b.grade}</span>` : ""}</div>
-      ${b.hq ? `<p class="small muted">${esc(b.hq)}${b.industry ? " · " + esc(b.industry) : ""}</p>` : ""}
-      ${Object.entries(P).map(([k, l]) => { const p = b.pillars[k] || {}; return `<div class="blk" style="cursor:default"><div class="top">
-        <span class="name" style="width:128px">${l.toUpperCase()}</span><span class="bar"><i style="width:${p.score ?? 0}%;background:${scol(p.score)}"></i></span>
-        <span class="val">${p.score ?? "—"}</span></div><div class="tiny muted" style="margin-top:3px">${esc(p.note || "")}</div></div>`; }).join("")}
-      ${b.grade ? "" : `<p class="note">${b.filled} of 5 pillars filled: the business grade appears when all five are in.</p>`}</div>`;
-  }
-  html += `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
-  return html;
-}
 
 function donut(items, colour) {
   const R = 52, C = 2 * Math.PI * R;
@@ -1712,13 +1725,13 @@ function method() {
 
 function route() {
   const h = location.hash || "#/";
-  const m = h.match(/^#\/c\/([A-Z0-9.\-]+)/i);
+  const m = h.match(/^#\/c\/([A-Z0-9.\-]+)(?:\/(\w+))?/i);
   $("#hd").classList.toggle("has-back", !!m);
   ["n-w", "n-c", "n-p", "n-x", "n-m", "n-s"].forEach(id => $("#" + id).classList.remove("on"));
   let html;
   if (h.startsWith("#/settings")) { html = settingsPage(); $("#n-s").classList.add("on"); }
   else if (!D) html = `<div class="empty">No data yet.<br>Press Publish to phone in Tarsier on your PC.</div>`;
-  else if (m) { html = company(m[1].toUpperCase()); $("#n-w").classList.add("on"); }
+  else if (m) { html = company(m[1].toUpperCase(), m[2]); $("#n-w").classList.add("on"); }
   else if (h.startsWith("#/compare")) { html = comparePage(); $("#n-c").classList.add("on"); }
   else if (h.startsWith("#/portfolio")) { html = portfolio(); $("#n-p").classList.add("on"); }
   else if (h.startsWith("#/method")) { html = method(); $("#n-m").classList.add("on"); }
