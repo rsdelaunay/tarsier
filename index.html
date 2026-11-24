@@ -182,6 +182,15 @@ th:first-child,td:first-child{text-align:left}
 td{text-align:right;padding:5px 2px;border-top:1px solid var(--line)}
 tr.w td{font-weight:700}
 .vals{display:flex;gap:8px;margin-bottom:10px}
+.hero2{background:var(--soft);border-radius:10px;padding:12px;text-align:center;margin-bottom:8px}
+.hero2 .k{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px}
+.hero2 .big{font-size:30px;font-weight:800}.hero2 .pc{font-size:18px;font-weight:800;margin-left:10px}
+.tgy{width:100%;border-collapse:collapse;margin:2px 0 8px;background:var(--soft);border-radius:8px}
+.tgy td,.tgy th{padding:4px 6px;font-size:12px;text-align:right;border:none}.tgy td:first-child,.tgy th:first-child{text-align:left;color:var(--muted)}
+.cons td.nf{background:#E9ECF0;color:#9AA5B1}.cons .src{display:block;font-size:9.5px;color:var(--muted);font-weight:400}
+.cons td.nf .src{color:#6250d6}.ngtag{color:#6250d6;font-weight:700}
+table.pt th.nf{color:#6250d6}table.pt td.nf .pin:not(.typed){background:#E9ECF0;color:#6250d6;border-color:#DDE1E7}
+.mos{display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0}.mos input{width:60px}
 .vals>div{flex:1;background:var(--soft);border-radius:8px;padding:9px 10px}
 .vals .k{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px}
 .vals .v{font-size:20px;font-weight:700}
@@ -815,17 +824,33 @@ function valuationCard(c, v, q) {
           ${ms.map(m => `<option value="${m.code}">${m.code == M.code ? "✓ " : ""}${esc(m.label)}${m.suggested ? " · suggested" : ""}</option>`).join("")}
         </select></div>
       ${v.business_model ? `<p class="tiny muted" style="margin:4px 0 0">Business model: ${esc(v.business_model)}${M.code != sug.code ? " · your choice, on this phone only" : ""}</p>` : ""}` : "";
-    return `<div class="card"><div class="h">Fair value · after a ${v.margin_of_safety}% margin of safety</div>${picker}
-      <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""} ${spTip}</div><div class="v">${usd(fv)}</div>
-        <div class="tiny ${up == null ? "muted" : up >= 0 ? "up" : "down"}">${up == null ? "no price saved" : pct(up, 1) + " vs " + usd(v.price)}</div></div>
-        <div><div class="k">BY FREE CASH FLOW</div><div class="v">${usd(v.dcf_value)}</div>
-        <div class="tiny ${v.dcf_upside == null ? "muted" : v.dcf_upside >= 0 ? "up" : "down"}">${v.dcf_upside == null ? "cross-check" : pct(v.dcf_upside, 1) + " vs price"}</div></div></div>
-      <table><tr><th>Price target</th>${yrs.map(y => `<th>${esc(y.replace("FY", "").replace("E", ""))}</th>`).join("")}</tr>
+    const cls = x => x == null ? "muted" : x >= 0 ? "up" : "down";
+    const vsP = x => x != null && v.price ? (x / v.price - 1) * 100 : null;
+    const g0 = vsP(wt[0]), ng = !alt && v.nongaap;
+    const mos = `<div class="mos">Margin of safety <input class="pin${((PEDIT[c.ticker] || {}).settings || {}).margin_of_safety != null ? " typed" : ""}" inputmode="decimal" value="${v.margin_of_safety}" onchange="pSet('${c.ticker}','margin_of_safety',this.value)"> % <span class="tiny muted">(10 at least)</span></div>`;
+    return `<div class="card">
+      <div class="hero2"><div class="k">PRICE TARGET · END ${esc(yrs[0])}</div>
+        <div><span class="big">${wt[0] == null ? "—" : "$" + Math.round(wt[0]).toLocaleString("en-US")}</span><span class="pc ${cls(g0)}">${g0 == null ? "" : pct(g0, 1)}</span></div>
+        <div class="tiny muted">weighted over the three scenarios · today's price ${usd(v.price)}${v.price_source ? " (" + esc(v.price_source) + ")" : ""}${er != null ? `<br>held to the end of ${esc(yrs[yrs.length - 1])}: <b>${pct(er, 1)}</b> a year` : ""}</div></div>
+      ${picker}
+      <div class="h" style="margin-top:8px">Fair value today · after the ${v.margin_of_safety}% margin of safety</div>
+      <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""} ${spTip}</div><div class="v">${usd(fv)} <span class="tiny ${cls(up)}">${up == null ? "" : pct(up, 1)}</span></div>
+        <div class="tiny muted">${!alt && v.fair_value_raw != null ? "before the margin: " + usd(v.fair_value_raw) : ""}</div></div>
+        <div><div class="k">BY FREE CASH FLOW</div><div class="v">${usd(v.dcf_value)} <span class="tiny ${cls(v.dcf_upside)}">${v.dcf_upside == null ? "" : pct(v.dcf_upside, 1)}</span></div>
+        <div class="tiny muted">${v.dcf_sbc_value != null ? "after SBC: " + usd(v.dcf_sbc_value) : ""}${v.wacc ? " · WACC " + v.wacc + "%" : ""}</div></div></div>
+      ${mos}
+      <table class="tgy"><tr><th>Targets · weighted</th>${yrs.map(y => `<th>End ${esc(y.replace("FY", "").replace("E", ""))}</th>`).join("")}</tr>
+        <tr><td>Target</td>${wt.map(x => `<td><b>${x == null ? "—" : "$" + Math.round(x).toLocaleString("en-US")}</b></td>`).join("")}</tr>
+        <tr><td>vs today</td>${wt.map(x => { const g = vsP(x); return `<td class="${cls(g)}">${g == null ? "—" : pct(g, 1)}</td>`; }).join("")}</tr>
+        ${alt ? "" : `<tr><td>a year</td>${(v.weighted_ret || []).map(x => `<td class="${cls(x)}">${x == null ? "—" : pct(x, 1) + "/yr"}</td>`).join("")}</tr>`}</table>
+      <table><tr><th>Price target ${ng ? `<span class="ngtag">· non-GAAP EPS</span> ${tipI("ng-" + c.ticker, "With an analyst consensus, P/E is applied to non-GAAP (adjusted) EPS, as the market quotes it. Non-GAAP leaves out stock pay and the amortisation of acquired intangibles, after tax. Stock pay is a real cost (dilution): the GAAP row shows the price without that help.")}` : ""}</th>${yrs.map(y => `<th>${esc(y.replace("FY", "").replace("E", ""))}</th>`).join("")}</tr>
       ${["bear", "base", "bull"].map(s => `<tr><td>${s[0].toUpperCase() + s.slice(1)} <span class="tiny muted">${v.weights[s]}%</span></td>${tg(s).map(x => `<td>${usd(x)}</td>`).join("")}</tr>`).join("")}
-      <tr class="w"><td>Weighted</td>${wt.map(x => `<td>${usd(x)}</td>`).join("")}</tr></table>
+      <tr class="w"><td>Weighted</td>${wt.map(x => `<td>${usd(x)}</td>`).join("")}</tr>
+      ${ng ? `<tr><td class="tiny muted">Base on GAAP EPS</td>${v.nongaap.target_gaap.base.map(x => `<td class="tiny muted">${usd(x)}</td>`).join("")}</tr>` : ""}</table>
+      ${ng ? `<p class="note"${v.nongaap.sbc_high ? ' style="color:#6250d6"' : ""}>${esc(v.nongaap.line)}</p>` : ""}
+      ${consensusBox(v)}
       ${driversBox(c, v, alt ? M.drivers : v.drivers, M)}
       ${riskBox(risks, "Before trusting the target")}
-      ${er != null ? `<p class="note">Expected yearly return at today's price: <b>${pct(er, 1)}</b>.</p>` : ""}
       ${alt ? `<p class="note">The points below explain the PC's method (${esc(pc.short)}).</p>` : ""}
       ${v.how_points && v.how_points.length ? pointers(v.how_points, "From target to fair value") : ""}
       ${v.why_points && v.why_points.length ? pointers(v.why_points, "Why the two values differ") :
@@ -985,7 +1010,17 @@ function pickMethod(t, code) {
 
 // ---------- the projection behind the targets, editable on the phone (reworked by the Python engine) ----------
 const PEDIT = LS.get("tarsier.edits", {}), PRES = {}, PBUSY = {}, PERR = {}, PSC = {};
-const hasEdits = t => { const e = PEDIT[t]; return !!(e && (Object.keys(e.scen || {}).length || (e.settings || {}).method)); };
+const hasEdits = t => { const e = PEDIT[t]; return !!(e && (Object.keys(e.scen || {}).length || Object.keys(e.settings || {}).length)); };
+function pSet(t, key, raw) {           // a setting changed on this phone (the margin of safety: 10% at least)
+  const e = PEDIT[t] = PEDIT[t] || {settings: {}, scen: {}};
+  e.settings = e.settings || {};
+  const x = String(raw).trim().replace(",", ".").replace("%", "");
+  if (x === "") delete e.settings[key];
+  else { let n = parseFloat(x); if (!isFinite(n)) return route(); if (key == "margin_of_safety") n = Math.max(n, 10) / 100; e.settings[key] = n; }
+  LS.set("tarsier.edits", PEDIT);
+  if (!hasEdits(t)) { delete PRES[t]; route(); return; }
+  pRecalc(t);
+}
 function pUser(c) {     // the PC's choices, with the phone's edits on top
   const base = JSON.parse(JSON.stringify(c.valuation.engine.user || {})), e = PEDIT[c.ticker] || {};
   base.settings = Object.assign(base.settings || {}, e.settings || {});
@@ -1024,6 +1059,22 @@ function pEdit(t, s, key, fy, raw, pct_) {
 }
 function pReset(t) { delete PEDIT[t]; LS.set("tarsier.edits", PEDIT); delete PRES[t]; PERR[t] = ""; route(); }
 function pTab(t, s) { PSC[t] = s; route(); }
+function consensusBox(v) {
+  const C = v.consensus;
+  if (!C) return "";
+  const names = {consensus: "analysts", guidance: "guidance", yours: "yours"};
+  const cell = (k, y) => { const val = C[k][y], s_ = C.src[k] ? C.src[k][y] : null;
+    const txt = val == null ? "" : k == "revenue" ? "$" + (val / 1000).toFixed(1) + "B" : "$" + val.toFixed(2);
+    return `<td class="${s_ ? "" : "nf"}">${txt}<span class="src">${s_ ? names[s_] || s_ : "no forecast"}</span></td>`; };
+  const any = C.no_forecast.some(x => !x);
+  if (!any) return `<div class="drv cons"><div class="dh"><b>Guidance and analyst consensus</b></div>
+    <p class="tiny muted" style="margin:4px 0 0">No guidance or consensus yet: every year is Tarsier's guess (the grey years below). Get them on the PC (page 2), then Sync.</p></div>`;
+  return `<div class="drv cons"><div class="dh"><b>Guidance and analyst consensus ${tipI("cons", "The base case follows these: revenue, and adjusted (non-GAAP) EPS. Order: yours, then the company's guidance accepted on the PC, then the analysts' consensus (Alpha Vantage). Grey years: no forecast yet, growth fades towards the long-run rate. Accept guidance and update the consensus on the PC; the phone gets them at Sync.")}</b></div>
+    <table class="pt"><tr><th></th>${C.labels.map(l => `<th>'${l.slice(4, 6)}</th>`).join("")}</tr>
+      <tr><td>Revenue</td>${C.labels.map((_, y) => cell("revenue", y)).join("")}</tr>
+      <tr><td>EPS, adjusted</td>${C.labels.map((_, y) => cell("eps", y)).join("")}</tr></table>
+    <p class="tiny muted" style="margin:4px 0 0">${any ? (C.fetched ? `Analysts: Alpha Vantage, ${esc(C.fetched.slice(0, 10))} · kept until ${esc(C.valid_until || "")}` : "") : "No guidance or consensus yet: these numbers are Tarsier's guess. Get them on the PC (page 2), then Sync."}</p></div>`;
+}
 function driversBox(c, v, d, M) {
   if (!d || !d.scen) return "";
   const t = c.ticker, s = PSC[t] || "base", D = d.scen[s], fys = d.labels.map(l => parseInt(l.slice(2, 6)));
@@ -1037,7 +1088,8 @@ function driversBox(c, v, d, M) {
         ${PCTS.map(x => `<option value="${x}"${x === val ? " selected" : ""}>${x}%</option>`).join("")}</select>`
     : `<input class="pin${typed ? " typed" : ""}" inputmode="decimal" value="${val == null ? "" : val}" placeholder="${val == null ? "—" : ""}"
         onchange="pEdit('${t}','${s}','${key}',${fys[y]},this.value,false)">`;
-  const row = (label, key, pct_, years) => `<tr><td>${label}</td>${fys.map((_, y) => `<td>${years.includes(y)
+  const nf = d.no_forecast || [];
+  const row = (label, key, pct_, years) => `<tr><td>${label}</td>${fys.map((_, y) => `<td class="${nf[y] && key != "multiple" ? "nf" : ""}">${years.includes(y)
     ? cell(key, y, D[key][y], D[key + "_typed"][y], pct_) : ""}</td>`).join("")}</tr>`;
   const all = [0, 1, 2, 3, 4], tg = d.targets_at;
   const basis = (D.basis.find(Boolean) || (M && M.short) || "");
@@ -1049,7 +1101,7 @@ function driversBox(c, v, d, M) {
     + (canEdit ? "Tap a growth to pick another from the list (−50% to 100%, every 5), or a multiple to type yours; blue = yours; ↺ Tarsier's (or an empty multiple) goes back. Changes stay on this phone." : "Sync from the PC to edit these here.");
   return `<div class="drv"><div class="dh"><b>What the targets rest on ${tipI("drv-" + t, help)}</b>
       <span class="ptabs">${["bear", "base", "bull"].map(x => `<button class="${x == s ? "on" : ""}" onclick="pTab('${t}','${x}')">${x[0].toUpperCase() + x.slice(1)} ${v.weights[x]}%</button>`).join("")}</span></div>
-    <table class="pt"><tr><th></th>${yl.map(y => `<th>${y}</th>`).join("")}</tr>
+    <table class="pt"><tr><th></th>${yl.map((y, i) => `<th class="${nf[i] ? "nf" : ""}">${y}${nf[i] ? "<br><span class=\"tiny\">no fcst</span>" : ""}</th>`).join("")}</tr>
       ${row("Revenue growth", "rev_growth", true, all)}
       ${row("EPS growth", "eps_growth", true, all)}
       <tr class="calc"><td>EPS</td>${D.eps.map(x => `<td>${x == null ? "—" : "$" + x.toFixed(2)}</td>`).join("")}</tr>
