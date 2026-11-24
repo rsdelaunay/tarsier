@@ -1462,8 +1462,6 @@ function mxTile(X, [key, label, freq, how, note]) {
     <div class="a">${esc(a)}</div>${b ? `<div class="b">${key == "expect" ? b : esc(b)}</div>` : ""}${mxNext(X, key)}</div>`;
 }
 // ---------- markets (daily) and the week's releases: same reading as the PC's Macroeconomy page ----------
-const MX_RELEASE = {wei: "Thursdays", nfci: "Wednesdays 8:30", mortgage: "Thursdays 12:00", crude: "Wednesdays 10:30",
-                    gas: "Mondays", fedbs: "Thursdays 16:30"};
 const sg = (v, d) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
 const bp = d => sg(d * 100, 0) + " bp";
 function vixWord(v) { return v < 15 ? "calm" : v < 20 ? "normal" : v < 30 ? "nervous" : "fear"; }
@@ -1491,23 +1489,6 @@ function marketsCard(X) {
       <div class="mx-tiles">${tiles.join("")}</div></div>
     ${C.yields ? mxChart("yields", "Treasury yields, last 12 months", C.yields, null, {digits: 2, freq: "w", names: true, tip: "Yields", note}) : ""}
     ${C.vix ? mxChart("vixc", "VIX, last 12 months", C.vix, 20, {unit: "", freq: "w", refLabel: "long-run average ~20", tip: "VIX", note: vx ? `Now ${vixWord(vx.value)} (${vx.value.toFixed(1)})` : ""}) : ""}`;
-}
-function weeklyCard(X) {
-  const tiles = [["wei", "Weekly Economic Index"], ["nfci", "Financial conditions"], ["mortgage", "30-year mortgage"],
-                 ["crude", "Crude oil stocks"], ["gas", "Gasoline"], ["fedbs", "Fed balance sheet"]].map(([k, l]) => {
-    const r = X[k];
-    if (!r) return mxT(k, l, "—", ["not available"]);
-    const p = r.prev, d = p != null ? r.value - p : null, arrow = d == null ? "" : d > 0 ? "▲ " : d < 0 ? "▼ " : "= ";
-    const out = `out ${MX_RELEASE[k]} (US time)`, when = mxPeriod(r.date, "w");
-    if (k == "wei") return mxT(k, l, sg(r.value, 2) + "%", [when, p != null ? arrow + "was " + sg(p, 2) + "%" : "", "≈ real GDP growth on the year", r.avg4 != null ? "4-week average " + sg(r.avg4, 2) + "%" : "", out]);
-    if (k == "nfci") return mxT(k, l, sg(r.value, 2), [when, p != null ? arrow + "was " + sg(p, 2) : "", r.value < 0 ? "looser than average" : "tighter than average", out], r.value > 0);
-    if (k == "mortgage") return mxT(k, l, r.value.toFixed(2) + "%", [when, p != null ? arrow + "was " + p.toFixed(2) + "%" : "", out]);
-    if (k == "crude") return mxT(k, l, (r.value / 1e3).toFixed(1) + "M bbl", [when, d ? `${d > 0 ? "build" : "draw"} ${(Math.abs(d) / 1e3).toFixed(1)}M bbl in the week` : "", out]);
-    if (k == "gas") return mxT(k, l, "$" + r.value.toFixed(2) + "/gal", [when, p != null ? arrow + "was $" + p.toFixed(2) : "", out]);
-    return mxT(k, l, "$" + (r.value / 1e6).toFixed(2) + "T", [when, d ? `${d > 0 ? "+" : "−"}$${Math.round(Math.abs(d) / 1e3)}B in the week (${d > 0 ? "growing" : "shrinking"})` : "", out]);
-  });
-  return `<div class="card"><div class="h">This week's data</div><p class="small muted" style="margin:-4px 0 8px">The figures that come out every week · jobless claims (Thursdays) are under Jobs</p>
-    <div class="mx-tiles">${tiles.join("")}</div></div>`;
 }
 // when the next figure comes out (BLS / BEA calendars, sent by the PC): red in the week it does
 function isoWeek(d) { const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), day = t.getUTCDay() || 7;
@@ -1540,8 +1521,7 @@ function macroPage() {
     ${mxChart("unrate", "Unemployment rate", C.unrate || {}, null)}
     ${MX_TILES.map(([g, items]) => `<div class="card"><div class="h">${g}</div><div class="mx-tiles">${items.map(t => mxTile(X, t)).join("")}</div></div>`).join("")}
     ${X.y10 || X.vix ? marketsCard(X) : ""}
-    ${X.wei || X.mortgage ? weeklyCard(X) : ""}
-    <p class="note" style="text-align:center">From the PC's last Sync (figures of ${esc(X.when || "")}).<br>Source: FRED, Federal Reserve Bank of St. Louis (yields: U.S. Treasury; VIX: CBOE; weekly: Dallas Fed, Chicago Fed, Freddie Mac, EIA, Federal Reserve). Market expects: Tarsier's reading of 30-day fed funds futures.</p>`;
+    <p class="note" style="text-align:center">From the PC's last Sync (figures of ${esc(X.when || "")}).<br>Source: FRED, Federal Reserve Bank of St. Louis (yields: U.S. Treasury; VIX: CBOE). Market expects: Tarsier's reading of 30-day fed funds futures.</p>`;
 }
 
 function method() {
