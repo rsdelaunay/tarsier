@@ -1512,11 +1512,6 @@ function callCard(c) {
   const guid = r.guidance.length ? [...r.guidance].sort((a, b) => ord[a.direction] - ord[b.direction]).map(g => { const [l, fg, bg] = DIR[g.direction];
       return `<div class="ec-g"><span class="ec-dir" style="color:${fg};background:${bg}">${l}</span>${ecMarked(g.text, g.marks || [], ["number"])} <span class="tiny muted">— ${esc(g.speaker)}</span></div>`; }).join("")
     : `<p class="small muted">No forward-looking sentence with a number in this call.</p>`;
-  const before = v ? Object.fromEntries(v.topics.map(x => [x.topic, x])) : {};
-  const topics = Object.entries(r.topics).filter(([k, x]) => x.hits || before[k]).sort((a, b) => b[1].per_k - a[1].per_k).map(([k, x]) => { const bf = before[k], ch = bf ? bf.change : null;
-      return `<tr><td><b>${esc(k)}</b></td><td>${x.per_k.toFixed(1)}</td>${v ? `<td>${bf ? bf.before.toFixed(1) : ""}</td><td class="${ch > 0.5 ? "up" : ch < -0.5 ? "down" : "muted"}">${ch == null ? "" : (ch > 0.5 ? "▲ " : ch < -0.5 ? "▼ " : "") + ecS(ch, 1)}</td>` : ""}</tr>`; }).join("");
-  const phrases = v && (v.new_phrases.length || v.gone_phrases.length) ? pointers([v.new_phrases.length ? "New this call: " + v.new_phrases.map(([p, n]) => `“${p}” (${n})`).join(", ") : "",
-      v.gone_phrases.length ? "Gone since last call: " + v.gone_phrases.map(([p]) => `“${p}”`).join(", ") : ""].filter(Boolean)) : "";
   const vg = {};
   r.qa.forEach(q => { if (q.vague && q.answer_turns.length) vg[q.answer_turns[0]] = q.dodge ? `⚠ vague answer: “${q.dodge}”` : "⚠ vague answer: long, hedged, no number"; });
   let tx = "", sec = null;
@@ -1532,8 +1527,6 @@ function callCard(c) {
       ${v ? "" : `<p class="note">No ${ecQL(ecPrev(r.quarter))} call saved: the comparison appears once the call before is fetched too.</p>`}
       ${pointers(r.points, "What stands out")}</div>
     <div class="card"><div class="h">Guidance and outlook ${tipPts("ecg-" + t, ["Every management sentence that looks ahead and has a number", "Raised / lowered / reaffirmed: from the words around it"])}</div>${guid}</div>
-    <div class="card"><div class="h">What they talked about ${tipPts("ect-" + t, ["Mentions per 1,000 words, this call against the one before", "New phrases: two-word phrases that appear far more than last time"])}</div>
-      <table><tr><th>Topic</th><th>This call</th>${v ? "<th>Before</th><th>Change</th>" : ""}</tr>${topics}</table>${phrases}</div>
     <div class="card"><div class="h">Transcript ${tipPts("ecx-" + t, ["Bold: numbers", "Yellow: forward-looking sentences with a number", "Amber italics: hedging", "Red underline: dodging phrases", "⚠ vague answer: it dodged, or was long, hedged and without a number"])}</div>
       <div class="ec-views">${[["all", "Whole call"], ["prepared", "Prepared"], ["qa", "Q&A"]].map(([k, l]) => `<button class="${ECVIEW == k ? "on" : ""}" onclick="ecView('${k}')">${l}</button>`).join("")}</div>
       <div class="ec-tx">${tx}</div></div>`;
