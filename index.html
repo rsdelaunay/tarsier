@@ -1459,7 +1459,7 @@ function mxTile(X, [key, label, freq, how, note]) {
       a = ex.join(" · ");
       if (r.prev != null) { const p = mxFmt(r.prev, how), arrow = p == v ? "=" : r.value > r.prev ? "▲" : "▼"; b = `${arrow} was ${p} in ${mxPeriod(r.prev_date, freq)}`; } } }
   return `<div class="mx-t"${key == "expect" ? ' style="grid-column:1/-1"' : ""}><div class="l">${esc(label)} ${mxTip(key)}</div><div class="v">${esc(v)}</div>
-    <div class="a">${esc(a)}</div>${b ? `<div class="b">${key == "expect" ? b : esc(b)}</div>` : ""}</div>`;
+    <div class="a">${esc(a)}</div>${b ? `<div class="b">${key == "expect" ? b : esc(b)}</div>` : ""}${mxNext(X, key)}</div>`;
 }
 // ---------- markets (daily) and the week's releases: same reading as the PC's Macroeconomy page ----------
 const MX_RELEASE = {wei: "Thursdays", nfci: "Wednesdays 8:30", mortgage: "Thursdays 12:00", crude: "Wednesdays 10:30",
@@ -1509,6 +1509,18 @@ function weeklyCard(X) {
   return `<div class="card"><div class="h">This week's data</div><p class="small muted" style="margin:-4px 0 8px">The figures that come out every week · jobless claims (Thursdays) are under Jobs</p>
     <div class="mx-tiles">${tiles.join("")}</div></div>`;
 }
+// when the next figure comes out (BLS / BEA calendars, sent by the PC): red in the week it does
+function isoWeek(d) { const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day); const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return t.getUTCFullYear() + "-" + Math.ceil(((t - y0) / 864e5 + 1) / 7); }
+function mxNext(X, key) {
+  const n = X.next && X.next[key];
+  if (!n) return "";
+  const now = new Date(), today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  if (n.date < today) return "";                                  // the PC's list is older than this week: wait for a Sync
+  const d = new Date(n.date + "T12:00:00"), hot = isoWeek(d) == isoWeek(now);
+  const day = n.date == today ? "today" : d.toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short"});
+  return `<div class="b" style="margin-top:3px;${hot ? "color:var(--bad);font-weight:700" : ""}">${hot ? "●" : "○"} next: ${esc(day)} · ${esc(n.what)}${hot ? " · this week" : ""}</div>`;
+}
 function macroPage() {
   const X = D && D.macro;
   if (!X) return `<div class="empty">No macro data yet.<br>Open Macroeconomy on the PC, then Sync with phone.</div>`;
@@ -1523,12 +1535,12 @@ function macroPage() {
   const C = X.charts || {};
   return `<div class="card"><div class="h">Macroeconomy · United States</div>${meet}</div>
     ${gcard}
-    ${X.y10 || X.vix ? marketsCard(X) : ""}
-    ${X.wei || X.mortgage ? weeklyCard(X) : ""}
     ${mxChart("cpi", "Inflation: CPI, year on year", C.cpi || {}, 2)}
     ${mxChart("pce", "Inflation: PCE, year on year", C.pce || {}, 2)}
     ${mxChart("unrate", "Unemployment rate", C.unrate || {}, null)}
     ${MX_TILES.map(([g, items]) => `<div class="card"><div class="h">${g}</div><div class="mx-tiles">${items.map(t => mxTile(X, t)).join("")}</div></div>`).join("")}
+    ${X.y10 || X.vix ? marketsCard(X) : ""}
+    ${X.wei || X.mortgage ? weeklyCard(X) : ""}
     <p class="note" style="text-align:center">From the PC's last Sync (figures of ${esc(X.when || "")}).<br>Source: FRED, Federal Reserve Bank of St. Louis (yields: U.S. Treasury; VIX: CBOE; weekly: Dallas Fed, Chicago Fed, Freddie Mac, EIA, Federal Reserve). Market expects: Tarsier's reading of 30-day fed funds futures.</p>`;
 }
 
