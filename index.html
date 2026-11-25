@@ -1740,9 +1740,10 @@ function mxNext(X, key) {
 }
 // ---------- News: headlines through the relay, joined and filtered by the PC's engine (engine/news.py) ----------
 // only the headline, source and time are kept; a tap opens the article on the publisher's site
-const NW_FEEDS = [["bloomberg-markets", "Bloomberg"], ["bloomberg-economics", "Bloomberg"], ["bloomberg-technology", "Bloomberg"], ["bloomberg-industries", "Bloomberg"], ["wsj-markets", "WSJ"], ["wsj-economy", "WSJ"], ["wsj-business", "WSJ"], ["wsj-technology", "WSJ"], ["marketwatch-top-stories", "MarketWatch"], ["marketwatch-bulletins", "MarketWatch"], ["cnbc-top-news", "CNBC"], ["cnbc-market-insider", "CNBC"], ["cnbc-investing", "CNBC"], ["cnbc-economy", "CNBC"], ["cnbc-finance", "CNBC"], ["cnbc-earnings", "CNBC"], ["cnbc-technology", "CNBC"], ["cnbc-business", "CNBC"], ["cnbc-energy", "CNBC"], ["reuters-markets", "Reuters"], ["reuters-business", "Reuters"], ["reuters-technology", "Reuters"], ["barron-s-markets", "Barron's"], ["ft-markets", "FT"], ["nyt-business", "NYT"], ["the-economist-finance", "The Economist"], ["yahoo-finance-news", "Yahoo Finance"], ["investing-com-stock-market", "Investing.com"], ["investing-com-economy", "Investing.com"], ["seeking-alpha-market-currents", "Seeking Alpha"]];
+const NW_FEEDS = [["bloomberg-markets", "Bloomberg"], ["bloomberg-economics", "Bloomberg"], ["bloomberg-technology", "Bloomberg"], ["bloomberg-industries", "Bloomberg"], ["wsj-markets", "WSJ"], ["wsj-economy", "WSJ"], ["wsj-business", "WSJ"], ["wsj-technology", "WSJ"], ["marketwatch-top-stories", "MarketWatch"], ["marketwatch-bulletins", "MarketWatch"], ["cnbc-top-news", "CNBC"], ["cnbc-market-insider", "CNBC"], ["cnbc-investing", "CNBC"], ["cnbc-economy", "CNBC"], ["cnbc-finance", "CNBC"], ["cnbc-earnings", "CNBC"], ["cnbc-technology", "CNBC"], ["cnbc-business", "CNBC"], ["cnbc-energy", "CNBC"], ["reuters-markets", "Reuters"], ["reuters-business", "Reuters"], ["reuters-technology", "Reuters"], ["barron-s-markets", "Barron's"], ["ft-markets", "FT"], ["nyt-business", "NYT"], ["the-economist-finance", "The Economist"], ["yahoo-finance-news", "Yahoo Finance"], ["investing-com-stock-market", "Investing.com"], ["investing-com-economy", "Investing.com"], ["seeking-alpha-market-currents", "Seeking Alpha"], ["wall-st-engine-stocktwits", "Wall St Engine"]];
 const NW_SOURCES = [...new Set(NW_FEEDS.map(f => f[1]))];
-const NW_FRESH = 10 * 60e3, NW_UNI = 7 * 864e5, NW_MAX = 150;
+const NW_FRESH = 10 * 60e3, NW_FAST = 2 * 60e3, NW_UNI = 7 * 864e5, NW_MAX = 150;
+const NW_FASTSRC = new Set(["Wall St Engine"]);      // engine/news.py FAST_SOURCES: every 2 minutes, always shown
 const NW_CAPS = [["$1B", 1e9], ["$5B", 5e9], ["$10B", 10e9], ["$50B", 50e9], ["$200B", 200e9]];
 const NWS = {busy: false, msg: "", data: null, tried: 0};
 function nwPrefs() { return Object.assign({view: "relevant", sort: "latest", cap: "$1B", off: [], q: ""}, LS.get("tarsier.newsPrefs", {})); }
@@ -1764,7 +1765,7 @@ function nwKeep(h, view, minCap, mine) {            // engine/news.py, keep()
   const caps = h.tickers.map(x => x[1]);
   if (caps.some(c => c && c >= minCap)) return true;
   if (caps.length && caps.every(c => c != null && c < minCap)) return false;
-  if (h.macro) return true;
+  if (h.macro || h.sources.some(s => NW_FASTSRC.has(s))) return true;
   return h.sources.length >= 2;
 }
 function nwScore(h, mine, now) {                     // engine/news.py, score()
@@ -1774,37 +1775,43 @@ function nwScore(h, mine, now) {                     // engine/news.py, score()
   return s - (now - h.time) / 3600 / 8;
 }
 function nwSay(m) { NWS.msg = m; const el = document.getElementById("nw-msg"); if (el) el.textContent = m; }
-async function nwLoad(force) {
+async function nwLoad(force) {            // the fast posters alone when only they are due (every 2 minutes)
+  let fast;
   if (NWS.busy) return;
   NWS.tried = Date.now();
   const kept = NWS.data || LS.get("tarsier.news", null);
-  if (!force && kept && Date.now() - kept.fetched * 1000 < NW_FRESH) { NWS.data = kept; return; }
-  NWS.busy = true; NWS.data = kept; nwSay("Getting the headlines…"); if (location.hash.startsWith("#/news")) route();
+  const fullFresh = kept && Date.now() - kept.fetched * 1000 < NW_FRESH;
+  fast = !force && fullFresh && Date.now() - (kept.fast_fetched || 0) * 1000 >= NW_FAST;
+  if (!force && !fast && fullFresh) { NWS.data = kept; return; }
+  NWS.busy = true; NWS.data = kept;
+  if (!fast) { nwSay("Getting the headlines…"); if (location.hash.startsWith("#/news")) route(); }
   try {
     const texts = {}, errors = {}; let done = 0;
-    await Promise.all(NW_FEEDS.map(async ([id]) => {
+    const todo = fast ? NW_FEEDS.filter(f => NW_FASTSRC.has(f[1])) : NW_FEEDS;
+    await Promise.all(todo.map(async ([id]) => {
       try {
         const r = await fetch(`${RELAY}/news/${id}`);
         if (!r.ok) throw new Error("HTTP " + r.status);
         texts[id] = await r.text();
       } catch (e) { errors[id] = e.message || String(e); }
-      nwSay(`Getting the headlines… ${++done} of ${NW_FEEDS.length}`);
+      ++done; if (!fast) nwSay(`Getting the headlines… ${done} of ${NW_FEEDS.length}`);
     }));
-    if (!Object.keys(texts).length) {
+    if (!Object.keys(texts).length && !fast) {
       const old = Object.values(errors).every(e => e == "HTTP 404");
       throw new Error(old ? "the relay does not know the news feeds yet: paste relay\\worker.js into the Cloudflare Worker again (see the PC's LEIA-ME)"
                           : "no feed answered (connection?)");
     }
     const uni = LS.get("tarsier.universe", null);
     let uniRaw = null;
-    if (!uni || Date.now() - uni.fetched > NW_UNI) {
+    if (!fast && (!uni || Date.now() - uni.fetched > NW_UNI)) {
       nwSay("Getting the list of US stocks (once a week)…");
       try { const r = await fetch(`${RELAY}/nasdaq/stocks`); if (r.ok) uniRaw = await r.text(); } catch (e) {}
     }
-    const py = await engine(m => nwSay(m));
-    nwSay("Joining the repeats…");
+    const py = await engine(m => { if (!fast) nwSay(m); });
+    if (!fast) nwSay("Joining the repeats…");
     py.globals.set("N_", JSON.stringify({texts, errors, stories: (kept || {}).stories || [], universe_raw: uniRaw,
-                                         universe: uni ? uni.rows : [], mine: [...nwMine()], now: Date.now() / 1000}));
+                                         universe: uni ? uni.rows : [], mine: [...nwMine()], now: Date.now() / 1000,
+                                         fast_only: !!fast, feeds: fast && kept ? kept.feeds : null, fetched: kept ? kept.fetched : 0}));
     const out = JSON.parse(py.runPython("phone_engine.news_update(N_)"));
     if (out.universe) LS.set("tarsier.universe", {fetched: Date.now(), rows: out.universe});
     delete out.universe;
@@ -1814,11 +1821,11 @@ async function nwLoad(force) {
       LS.set("tarsier.news", Object.assign({}, out, {stories: out.stories.filter(h => h.time >= cut)}));
     }
     nwSay("");
-  } catch (e) { nwSay("Could not get the headlines: " + (e.message || e)); }
+  } catch (e) { if (!fast) nwSay("Could not get the headlines: " + (e.message || e)); }
   NWS.busy = false;
   if (location.hash.startsWith("#/news")) route();
 }
-setInterval(() => { if (location.hash.startsWith("#/news") && !NWS.busy && document.visibilityState == "visible") nwLoad(false); }, 60e3);
+setInterval(() => { if (location.hash.startsWith("#/news") && !NWS.busy && document.visibilityState == "visible") nwLoad(false); }, 30e3);
 function nwCap(c) { return !c ? "" : c >= 1e12 ? "$" + (c / 1e12).toFixed(1) + "T" : c >= 1e9 ? "$" + Math.round(c / 1e9) + "B" : "$" + Math.round(c / 1e6) + "M"; }
 function nwDay(ts) {
   const d = new Date(ts * 1000), t = new Date(); t.setHours(0, 0, 0, 0);
@@ -1878,7 +1885,8 @@ function newsPage() {
   rows += "</div>";
   return html + `<div class="card" style="padding:6px">${rows}${shown.length > NW_MAX ? `<p class="tiny muted" style="margin:8px">… and ${shown.length - NW_MAX} more: narrow the filters or use Find.</p>` : ""}</div>
     <ul class="tiny muted" style="margin:0 4px 10px;padding-left:16px"><li>Headlines only, from each publisher's free feed: a tap opens the article on their site (Bloomberg, WSJ, FT and Barron's may ask for a subscription)</li>
-    <li>Reuters and Barron's come through Google News (no feed of their own)</li><li>New headlines every 10 minutes while this page is open; kept 3 days</li></ul>`;
+    <li>Reuters and Barron's come through Google News (no feed of their own)</li>
+    <li>Wall St Engine: his posts on Stocktwits, read every 2 minutes and always shown unless only about companies under the size you picked</li><li>New headlines every 10 minutes while this page is open; kept 3 days</li></ul>`;
 }
 
 function macroPage() {
