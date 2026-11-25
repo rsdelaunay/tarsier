@@ -27,7 +27,20 @@ header .tag{font:10px Consolas,monospace;color:var(--gold);text-align:right;line
 main{padding:12px;max-width:640px;margin:0 auto}
 nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;z-index:5;
 padding-bottom:env(safe-area-inset-bottom)}
-nav a{flex:1;text-align:center;padding:8px 0 9px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:600}
+nav a{flex:1;text-align:center;padding:8px 0 9px;color:var(--muted);text-decoration:none;font-size:10.5px;font-weight:600;min-width:0}
+.nw-seg{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0}.nw-seg .k{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.4px;margin-right:2px}
+.nw-seg button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 10px;font:600 12px inherit;font-family:inherit;color:var(--ink)}
+.nw-seg button.on{background:var(--navy);color:#fff;border-color:var(--navy)}.nw-seg select,.nw-seg input{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:13px inherit;font-family:inherit;background:#fff}
+.nw-src{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding:2px 0}.nw-src::-webkit-scrollbar{display:none}
+.nw-src button{flex:none;border:1px solid var(--line);background:var(--soft);border-radius:14px;padding:4px 9px;font:600 11px inherit;font-family:inherit;color:var(--ink);white-space:nowrap}
+.nw-src button.off{background:#fff;color:#A7B0BC;text-decoration:line-through}
+.nw-day{font-size:10.5px;font-weight:700;color:var(--navy);letter-spacing:.5px;margin:12px 2px 4px}
+.nw-r{padding:8px 8px;border-radius:8px}.nw-r:nth-child(even){background:var(--soft)}.nw-r.mine{background:#FFF3D1}
+.nw-m{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10.5px;color:var(--muted)}
+.nw-m b{color:var(--ink)}.nw-r a.t{display:block;color:var(--ink);text-decoration:none;font-size:14px;line-height:1.35;margin-top:2px}
+.nw-r.mine a.t{font-weight:700}.nw-c{font-size:9.5px;font-weight:700;background:#E9ECF0;color:var(--muted);border-radius:4px;padding:1px 5px;margin-left:3px;white-space:nowrap}
+.nw-c.y{background:#FBE3A6;color:#8A5A00}.nw-r details{margin-top:3px;font-size:11.5px}.nw-r summary{color:var(--navy);font-weight:700;cursor:pointer}
+.nw-r details a{display:block;color:var(--ink);text-decoration:none;margin:3px 0 0 10px}
 nav a svg{display:block;margin:0 auto 2px;width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 nav a.on{color:var(--navy)}
 nav a.on svg{stroke:var(--navy)}
@@ -255,6 +268,7 @@ p{margin:6px 0}
   <a href="#/compare" id="n-c"><svg viewBox="0 0 24 24"><path d="M5 20V9M12 20V4M19 20v-8"/></svg>Compare</a>
   <a href="#/portfolio" id="n-p"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 5"/></svg>Portfolio</a>
   <a href="#/macro" id="n-x"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 7-8"/><path d="M15 7h4v4"/></svg>Macro</a>
+  <a href="#/news" id="n-n"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>News</a>
   <a href="#/method" id="n-m"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Method</a>
   <a href="#/settings" id="n-s"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
 </nav>
@@ -1724,6 +1738,149 @@ function mxNext(X, key) {
   const day = n.date == today ? "today" : d.toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short"});
   return `<div class="b" style="margin-top:3px;${hot ? "color:var(--bad);font-weight:700" : ""}">Next release: ${esc(day)}</div>`;
 }
+// ---------- News: headlines through the relay, joined and filtered by the PC's engine (engine/news.py) ----------
+// only the headline, source and time are kept; a tap opens the article on the publisher's site
+const NW_FEEDS = [["bloomberg-markets", "Bloomberg"], ["bloomberg-economics", "Bloomberg"], ["bloomberg-technology", "Bloomberg"], ["bloomberg-industries", "Bloomberg"], ["wsj-markets", "WSJ"], ["wsj-economy", "WSJ"], ["wsj-business", "WSJ"], ["wsj-technology", "WSJ"], ["marketwatch-top-stories", "MarketWatch"], ["marketwatch-bulletins", "MarketWatch"], ["cnbc-top-news", "CNBC"], ["cnbc-market-insider", "CNBC"], ["cnbc-investing", "CNBC"], ["cnbc-economy", "CNBC"], ["cnbc-finance", "CNBC"], ["cnbc-earnings", "CNBC"], ["cnbc-technology", "CNBC"], ["cnbc-business", "CNBC"], ["cnbc-energy", "CNBC"], ["reuters-markets", "Reuters"], ["reuters-business", "Reuters"], ["reuters-technology", "Reuters"], ["barron-s-markets", "Barron's"], ["ft-markets", "FT"], ["nyt-business", "NYT"], ["the-economist-finance", "The Economist"], ["yahoo-finance-news", "Yahoo Finance"], ["investing-com-stock-market", "Investing.com"], ["investing-com-economy", "Investing.com"], ["seeking-alpha-market-currents", "Seeking Alpha"]];
+const NW_SOURCES = [...new Set(NW_FEEDS.map(f => f[1]))];
+const NW_FRESH = 10 * 60e3, NW_UNI = 7 * 864e5, NW_MAX = 150;
+const NW_CAPS = [["$1B", 1e9], ["$5B", 5e9], ["$10B", 10e9], ["$50B", 50e9], ["$200B", 200e9]];
+const NWS = {busy: false, msg: "", data: null, tried: 0};
+function nwPrefs() { return Object.assign({view: "relevant", sort: "latest", cap: "$1B", off: [], q: ""}, LS.get("tarsier.newsPrefs", {})); }
+function nwSet(k, v) {
+  const p = nwPrefs();
+  if (k == "off") { const s = new Set(p.off); s.has(v) ? s.delete(v) : s.add(v); p.off = [...s]; } else p[k] = v;
+  LS.set("tarsier.newsPrefs", p); route();
+}
+function nwMine() {
+  const s = new Set(allCos().map(c => c.ticker.toUpperCase().replace(/[./]/g, "-")));
+  if (PRIV && PRIV.holdings) PRIV.holdings.forEach(h => { if (h.t && h.t != "CASH") s.add(h.t.toUpperCase().replace(/[./]/g, "-")); });
+  return s;
+}
+function nwKeep(h, view, minCap, mine) {            // engine/news.py, keep()
+  if (view == "all") return true;
+  if (view == "mine") return mine;
+  if (mine) return true;
+  if (h.noise) return false;
+  const caps = h.tickers.map(x => x[1]);
+  if (caps.some(c => c && c >= minCap)) return true;
+  if (caps.length && caps.every(c => c != null && c < minCap)) return false;
+  if (h.macro) return true;
+  return h.sources.length >= 2;
+}
+function nwScore(h, mine, now) {                     // engine/news.py, score()
+  const big = Math.max(0, ...h.tickers.map(x => x[1] || 0));
+  let s = (mine ? 4 : 0) + 1.5 * Math.log2(h.sources.length) + (h.macro ? 1 : 0);
+  if (big) s += Math.max(0, 0.6 * Math.log10(big / 1e9));
+  return s - (now - h.time) / 3600 / 8;
+}
+function nwSay(m) { NWS.msg = m; const el = document.getElementById("nw-msg"); if (el) el.textContent = m; }
+async function nwLoad(force) {
+  if (NWS.busy) return;
+  NWS.tried = Date.now();
+  const kept = NWS.data || LS.get("tarsier.news", null);
+  if (!force && kept && Date.now() - kept.fetched * 1000 < NW_FRESH) { NWS.data = kept; return; }
+  NWS.busy = true; NWS.data = kept; nwSay("Getting the headlines…"); if (location.hash.startsWith("#/news")) route();
+  try {
+    const texts = {}, errors = {}; let done = 0;
+    await Promise.all(NW_FEEDS.map(async ([id]) => {
+      try {
+        const r = await fetch(`${RELAY}/news/${id}`);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        texts[id] = await r.text();
+      } catch (e) { errors[id] = e.message || String(e); }
+      nwSay(`Getting the headlines… ${++done} of ${NW_FEEDS.length}`);
+    }));
+    if (!Object.keys(texts).length) {
+      const old = Object.values(errors).every(e => e == "HTTP 404");
+      throw new Error(old ? "the relay does not know the news feeds yet: paste relay\\worker.js into the Cloudflare Worker again (see the PC's LEIA-ME)"
+                          : "no feed answered (connection?)");
+    }
+    const uni = LS.get("tarsier.universe", null);
+    let uniRaw = null;
+    if (!uni || Date.now() - uni.fetched > NW_UNI) {
+      nwSay("Getting the list of US stocks (once a week)…");
+      try { const r = await fetch(`${RELAY}/nasdaq/stocks`); if (r.ok) uniRaw = await r.text(); } catch (e) {}
+    }
+    const py = await engine(m => nwSay(m));
+    nwSay("Joining the repeats…");
+    py.globals.set("N_", JSON.stringify({texts, errors, stories: (kept || {}).stories || [], universe_raw: uniRaw,
+                                         universe: uni ? uni.rows : [], mine: [...nwMine()], now: Date.now() / 1000}));
+    const out = JSON.parse(py.runPython("phone_engine.news_update(N_)"));
+    if (out.universe) LS.set("tarsier.universe", {fetched: Date.now(), rows: out.universe});
+    delete out.universe;
+    NWS.data = out;
+    if (!LS.set("tarsier.news", out)) {               // too big for the phone's storage: keep the last day
+      const cut = Date.now() / 1000 - 86400;
+      LS.set("tarsier.news", Object.assign({}, out, {stories: out.stories.filter(h => h.time >= cut)}));
+    }
+    nwSay("");
+  } catch (e) { nwSay("Could not get the headlines: " + (e.message || e)); }
+  NWS.busy = false;
+  if (location.hash.startsWith("#/news")) route();
+}
+setInterval(() => { if (location.hash.startsWith("#/news") && !NWS.busy && document.visibilityState == "visible") nwLoad(false); }, 60e3);
+function nwCap(c) { return !c ? "" : c >= 1e12 ? "$" + (c / 1e12).toFixed(1) + "T" : c >= 1e9 ? "$" + Math.round(c / 1e9) + "B" : "$" + Math.round(c / 1e6) + "M"; }
+function nwDay(ts) {
+  const d = new Date(ts * 1000), t = new Date(); t.setHours(0, 0, 0, 0);
+  const d0 = new Date(d); d0.setHours(0, 0, 0, 0);
+  const n = Math.round((t - d0) / 864e5);
+  const w = d.toLocaleDateString("en-GB", {weekday: "long"}), dm = d.toLocaleDateString("en-GB", {day: "2-digit", month: "short"});
+  return (n == 0 ? "Today" : n == 1 ? "Yesterday" : w) + " · " + dm;
+}
+function newsPage() {
+  if (!NWS.data) NWS.data = LS.get("tarsier.news", null);
+  if (!NWS.busy && Date.now() - NWS.tried > NW_FRESH && (!NWS.data || Date.now() - NWS.data.fetched * 1000 > NW_FRESH)) setTimeout(() => nwLoad(false), 0);
+  const P = nwPrefs(), d = NWS.data, mine = nwMine(), minCap = (NW_CAPS.find(c => c[0] == P.cap) || NW_CAPS[0])[1];
+  const seg = (k, opts) => opts.map(([v, l]) => `<button class="${P[k] == v ? "on" : ""}" onclick="nwSet('${k}','${v}')">${l}</button>`).join("");
+  const counts = {};
+  ((d && d.stories) || []).forEach(h => h.sources.forEach(s => counts[s] = (counts[s] || 0) + 1));
+  const feeds = (d && d.feeds) || {}, bad = Object.entries(feeds).filter(([, f]) => !f.ok);
+  let shown = [];
+  if (d) {
+    const q = (P.q || "").trim().toLowerCase(), off = new Set(P.off);
+    shown = d.stories.filter(h => {
+      const my = h.tickers.some(x => mine.has(x[0]));
+      if (h.sources.every(s => off.has(s))) return false;
+      if (!nwKeep(h, P.view, minCap, my)) return false;
+      return !q || h.title.toLowerCase().includes(q) || h.tickers.some(x => x[0].toLowerCase() == q);
+    });
+    if (P.sort == "top") { const now = Date.now() / 1000; shown.sort((a, b) => nwScore(b, b.tickers.some(x => mine.has(x[0])), now) - nwScore(a, a.tickers.some(x => mine.has(x[0])), now)); }
+  }
+  const when = d && d.fetched ? new Date(d.fetched * 1000).toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"}) : "never";
+  const nOk = Object.values(feeds).filter(f => f.ok).length;
+  let html = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">
+      <div><div class="h" style="margin:0">News</div><div class="tiny muted">markets headlines · each story once</div></div>
+      <button class="pbtn" style="margin:0;white-space:nowrap" onclick="nwLoad(true)" ${NWS.busy ? "disabled" : ""}>↻ Update</button></div>
+    <p class="tiny muted" style="margin:6px 0 0">${d ? `Updated ${when} · ${nOk} of ${NW_FEEDS.length} feeds · ${d.n_items} headlines → ${d.stories.length} stories · ${shown.length} shown`
+      + (bad.length ? " " + tipI("nw-bad", bad.map(([u, f]) => "• " + u.replace(/^https?:\/\//, "").slice(0, 40) + ": " + (f.err || "no answer")).join("\n")) : "") : "Not fetched yet"}</p>
+    <p class="tiny" id="nw-msg" style="margin:4px 0 0;color:${/Could not/.test(NWS.msg) ? "var(--bad)" : "var(--navy)"}">${esc(NWS.msg)}</p></div>
+  <div class="card">
+    <div class="nw-seg"><span class="k">SHOW</span>${seg("view", [["relevant", "Relevant"], ["mine", "Yours"], ["all", "Everything"]])}
+      ${tipI("nw-how", "• Relevant: yours (watchlist and portfolio), companies from the size you pick, and the economy and markets (Fed, rates, inflation, oil, the indices, deals…)\n• Left out: headlines about smaller companies only, and personal-finance noise\n• A headline with nothing recognised shows only when 2+ outlets carry it\n• Top: yours first, then what more outlets carry, big companies, the economy; older counts less\n• Companies and market caps: Nasdaq's list of US stocks, kept a week")}</div>
+    <div class="nw-seg"><span class="k">ORDER</span>${seg("sort", [["latest", "Latest"], ["top", "Top"]])}
+      <span class="k" style="margin-left:8px">FROM</span><select onchange="nwSet('cap',this.value)">${NW_CAPS.map(([c]) => `<option${c == P.cap ? " selected" : ""}>${c}</option>`).join("")}</select></div>
+    <div class="nw-seg"><input type="search" placeholder="Find a word or ticker" value="${esc(P.q || "")}" onchange="nwSet('q',this.value)" style="flex:1"></div>
+    <div class="nw-src">${NW_SOURCES.map(s => `<button class="${P.off.includes(s) ? "off" : ""}" onclick="nwSet('off','${s.replace(/'/g, "\\'")}')">${esc(s)} ${counts[s] || 0}</button>`).join("")}</div></div>`;
+  if (!d) return html + `<div class="empty">${NWS.busy ? "Getting the headlines…" : "No headlines yet: press Update."}</div>`;
+  if (!shown.length) return html + `<div class="empty">Nothing here with these filters.</div>`;
+  let last = null, rows = "";
+  shown.slice(0, NW_MAX).forEach(h => {
+    const my = h.tickers.some(x => mine.has(x[0]));
+    if (P.sort == "latest") { const day = nwDay(h.time); if (day != last) { if (rows) rows += "</div>"; rows += `<div class="nw-day">${esc(day.toUpperCase())}</div><div>`; last = day; } }
+    const t = new Date(h.time * 1000), hm = t.toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
+    const chips = h.tickers.slice().sort((a, b) => (mine.has(b[0]) - mine.has(a[0])) || ((b[1] || 0) - (a[1] || 0))).slice(0, 3)
+      .map(([s, c]) => mine.has(s) ? `<span class="nw-c y">★ ${esc(s)}</span>` : `<span class="nw-c">${esc(s)}${c ? " " + nwCap(c) : ""}</span>`).join("");
+    rows += `<div class="nw-r${my ? " mine" : ""}"><div class="nw-m"><span>${P.sort == "top" ? esc(nwDay(h.time).split(" · ")[1]) + " " : ""}${hm} · <b>${esc(h.source)}</b></span><span>${chips}</span></div>
+      <a class="t" href="${esc(h.link)}" target="_blank" rel="noopener">${esc(h.title)}</a>
+      ${h.also && h.also.length ? `<details><summary>+${h.also.length} outlet${h.also.length > 1 ? "s" : ""}</summary>${h.also.map(x => `<a href="${esc(x.link)}" target="_blank" rel="noopener"><b>${esc(x.source)}</b> · ${esc(x.title)}</a>`).join("")}</details>` : ""}</div>`;
+  });
+  if (P.sort != "latest") rows = "<div>" + rows;
+  rows += "</div>";
+  return html + `<div class="card" style="padding:6px">${rows}${shown.length > NW_MAX ? `<p class="tiny muted" style="margin:8px">… and ${shown.length - NW_MAX} more: narrow the filters or use Find.</p>` : ""}</div>
+    <ul class="tiny muted" style="margin:0 4px 10px;padding-left:16px"><li>Headlines only, from each publisher's free feed: a tap opens the article on their site (Bloomberg, WSJ, FT and Barron's may ask for a subscription)</li>
+    <li>Reuters and Barron's come through Google News (no feed of their own)</li><li>New headlines every 10 minutes while this page is open; kept 3 days</li></ul>`;
+}
+
 function macroPage() {
   const X = D && D.macro;
   if (!X) return `<div class="empty">No macro data yet.<br>Open Macroeconomy on the PC, then Sync with phone.</div>`;
@@ -1789,9 +1946,10 @@ function route() {
   const h = location.hash || "#/";
   const m = h.match(/^#\/c\/([A-Z0-9.\-]+)(?:\/(\w+))?/i);
   $("#hd").classList.toggle("has-back", !!m);
-  ["n-w", "n-c", "n-p", "n-x", "n-m", "n-s"].forEach(id => $("#" + id).classList.remove("on"));
+  ["n-w", "n-c", "n-p", "n-x", "n-n", "n-m", "n-s"].forEach(id => $("#" + id).classList.remove("on"));
   let html;
   if (h.startsWith("#/settings")) { html = settingsPage(); $("#n-s").classList.add("on"); }
+  else if (h.startsWith("#/news")) { html = newsPage(); $("#n-n").classList.add("on"); }
   else if (!D) html = `<div class="empty">No data yet.<br>Press Publish to phone in Tarsier on your PC.</div>`;
   else if (m) { html = company(m[1].toUpperCase(), m[2]); $("#n-w").classList.add("on"); }
   else if (h.startsWith("#/compare")) { html = comparePage(); $("#n-c").classList.add("on"); }
@@ -1799,6 +1957,7 @@ function route() {
   else if (h.startsWith("#/method")) { html = method(); $("#n-m").classList.add("on"); }
   else if (h.startsWith("#/settings")) { html = settingsPage(); $("#n-s").classList.add("on"); }
   else if (h.startsWith("#/macro")) { html = macroPage(); $("#n-x").classList.add("on"); }
+  else if (h.startsWith("#/news")) { html = newsPage(); $("#n-n").classList.add("on"); }
   else { html = research(); $("#n-w").classList.add("on"); }
   // redraws on the same page (an ⓘ, a sort, prices arriving) keep you where you are;
   // going to another page starts at the top (the hashchange listener below)
