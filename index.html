@@ -822,6 +822,15 @@ function company(t, sub) {
   return html;
 }
 
+function anchorLine(v, alt) {
+  // the market anchor: Tarsier's 12-month figure next to an analysts-style one (tap for each step)
+  const a = v && v.anchor;
+  if (alt || !a) return "";
+  if (!a.on) return a.why ? `<p class="note">${esc(a.why)}</p>` : "";
+  const st = a.warn ? ' style="color:#b3261e;background:#fbe9e7;padding:6px 8px;border-radius:8px"' : "";
+  return `<details class="note"${st}><summary>${esc(a.line)}</summary><div class="tiny" style="white-space:pre-line;margin-top:6px">${esc(a.why)}</div></details>`;
+}
+
 function valuationCard(c, v, q) {
     const yrs = v.target_years, ms = v.methods || [];
     const pc = ms.find(m => m.current), sug = ms.find(m => m.suggested);
@@ -862,6 +871,7 @@ function valuationCard(c, v, q) {
       <tr class="w"><td>Weighted</td>${wt.map(x => `<td>${usd(x)}</td>`).join("")}</tr>
       ${ng ? `<tr><td class="tiny muted">Base on GAAP EPS</td>${v.nongaap.target_gaap.base.map(x => `<td class="tiny muted">${usd(x)}</td>`).join("")}</tr>` : ""}</table>
       ${ng ? `<p class="note"${v.nongaap.sbc_high ? ' style="color:#6250d6"' : ""}>${esc(v.nongaap.line)}</p>` : ""}
+      ${anchorLine(v, alt)}
       ${consensusBox(v)}
       ${driversBox(c, v, alt ? M.drivers : v.drivers, M)}
       ${riskBox(risks, "Before trusting the target")}
