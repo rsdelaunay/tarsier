@@ -507,6 +507,14 @@ function quickChip(c) {
   const k = quickOf(c);
   return k ? `<span class="chip quick" title="Graded automatically from the SEC filings; not analysed yet">QUICK LOOK</span>` : "";
 }
+function checksBox(q) {
+  // the PC's SEC data check: numbers that look misread, shown before the grade
+  const c = q.checks || [];
+  if (!c.length) return "";
+  const warn = c.some(([l]) => l == "warn");
+  return `<div class="card" style="background:${warn ? "#FFF4E5" : "var(--soft)"}"><div class="h" style="color:${warn ? "#8A4B00" : "var(--muted)"}">${warn ? "⚠ Data check" : "ⓘ Data note"}</div>
+    ${c.map(([l, t]) => `<p class="small" style="margin:4px 0;color:${l == "warn" ? "#8A4B00" : "var(--muted)"}">${l == "warn" ? "⚠ " : "ⓘ "}${esc(t)}</p>`).join("")}</div>`;
+}
 function chips(q) {
   return (q.preliminary ? '<span class="chip pre">PRELIMINARY</span>' : "") +
          (q.unsupported ? '<span class="chip nc">NOT COMPARABLE</span>' : "") +
@@ -819,6 +827,7 @@ function company(t, sub) {
 
   html += quarters(c);
 
+  html += checksBox(q);
   html += gradeCard(q);
 
   html += `<div class="card"><div class="h">Free cash flow · last 12 months</div><div class="tiles">
