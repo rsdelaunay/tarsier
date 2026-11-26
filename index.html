@@ -946,7 +946,7 @@ function entChart(t, r) {
   labs.sort((a, b) => a[0] - b[0]); for (let j = 1; j < labs.length; j++) labs[j][0] = Math.max(labs[j][0], labs[j - 1][0] + 11);
   labs.forEach(([y, txt, w, col]) => { s += `<text x="${LX}" y="${(y + 3).toFixed(1)}" class="lb" fill="${col}" font-weight="${w}">${txt}</text>`; });
   const line = (arr, YY, col, w, dash) => { const p = xs.filter(i => arr && arr[i] != null).map(i => `${X(i).toFixed(1)},${YY(arr[i]).toFixed(1)}`); return p.length > 1 ? `<polyline points="${p.join(" ")}" fill="none" stroke="${col}" stroke-width="${w}"${dash ? ` stroke-dasharray="${dash}"` : ""}/>` : ""; };
-  s += line(C.bb_up, Y, "#A7B1BE", 0.8, "2 2") + line(C.bb_lo, Y, "#A7B1BE", 0.8, "2 2") + line(C.e200, Y, "#7C3AED", 1.2) + line(C.e50, Y, "#D97706", 1.2, "4 3") + line(C.sma20, Y, "#0EA5E9", 0.9) + line(C.c, Y, "#1B2A41", 1.6);
+  s += line(C.bb_up, Y, "#94A3B8", 1.2) + line(C.bb_lo, Y, "#94A3B8", 1.2) + line(C.e200, Y, "#7C3AED", 1.2) + line(C.e50, Y, "#D97706", 1.2, "4 3") + line(C.sma20, Y, "#38BDF8", 1.5) + line(C.c, Y, "#1B2A41", 1.6);
   const vmax = Math.max(...xs.map(i => C.v[i] || 0)) || 1, bw = Math.max(0.6, PW / xs.length * 0.7);
   xs.forEach(i => { const h = (C.v[i] || 0) / vmax * VH, up = i == 0 || C.c[i] >= C.c[i - 1]; s += `<rect x="${(X(i) - bw / 2).toFixed(1)}" y="${(vb - h).toFixed(1)}" width="${bw.toFixed(2)}" height="${h.toFixed(1)}" fill="${up ? "#B7DFC0" : "#F2B8B5"}"/>`; });
   const strip = (top, hgt, lo_, hi_, title, marks, bands) => {
@@ -1016,7 +1016,7 @@ function entryCard(c) {
         : `<div class="tiny muted" style="margin-top:6px">No fair value yet: open Projections</div>`}
       <button class="pbtn" ${ENTBUSY[t] ? "disabled" : ""} onclick="entGo('${t}', true)">${ENTBUSY[t] ? "Working…" : "↻ Update"}</button></div></div>`;
   h += `<div class="card"><div class="h">Price and support levels</div>
-    <div class="tiny" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px"><span>— price</span><span style="color:#7C3AED">— EMA 200</span><span style="color:#D97706">- - EMA 50</span><span style="color:#1E7B34">- - fair value</span><span style="color:#1E7B34;font-weight:700">BUY n: the plan's levels</span><span style="color:#7FBF8E">▬ high-volume zones</span><span style="color:#0EA5E9">— SMA 20</span><span style="color:#8A96A6">·· Bollinger</span><span style="color:#B3261E">- - R: resistance</span></div>
+    <div class="tiny" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px"><span>— price</span><span style="color:#7C3AED">— EMA 200</span><span style="color:#D97706">- - EMA 50</span><span style="color:#1E7B34">- - fair value</span><span style="color:#1E7B34;font-weight:700">BUY n: the plan's levels</span><span style="color:#7FBF8E">▬ high-volume zones</span><span style="color:#38BDF8">— SMA 20</span><span style="color:#94A3B8">— Bollinger</span><span style="color:#B3261E">- - R: resistance</span></div>
     <div class="ctabs" style="position:static;padding:0 0 4px">${["3M", "6M", "1Y", "2Y"].map(s => `<button class="${s == ENTSPAN ? "on" : ""}" onclick="entSpan('${s}')">${s}</button>`).join("")}</div>
     ${entChart(t, r)}<p class="tiny muted">Strips: RSI 14 days (70+ stretched, 30- oversold) · MACD 12/26/9 (line, signal, the gap as bars) · distance to the SMA 50 in 14-day ATRs (±2.5 stretched, ±3 overextended; in a strong trend it can stay high for long).</p></div>`;
   const tone = {good: "var(--ok)", bad: "var(--bad)", warn: "#B7791F"};
@@ -1044,7 +1044,7 @@ function anchorLine(v, alt) {
   const a = v && v.anchor;
   if (alt || !a) return "";
   if (!a.on) return a.why ? `<p class="note">${esc(a.why)}</p>` : "";
-  const st = a.warn ? ' style="color:#b3261e;background:#fbe9e7;padding:6px 8px;border-radius:8px"' : "";
+  const st = ' style="background:#F2F4F7;padding:6px 8px;border-radius:8px;color:inherit"';
   return `<details class="note"${st}><summary>${esc(a.line)}</summary><div class="tiny" style="white-space:pre-line;margin-top:6px">${esc(a.why)}</div></details>`;
 }
 
@@ -1125,7 +1125,7 @@ function valuationCard(c, v, q) {
     return `<div class="card">
       <div class="hero2"><div class="k">PRICE TARGET · END ${esc(yrs[0])}</div>
         <div><span class="big">${wt[0] == null ? "—" : "$" + Math.round(wt[0]).toLocaleString("en-US")}</span><span class="pc ${cls(g0)}">${g0 == null ? "" : pct(g0, 1)}</span></div>
-        <div class="tiny muted">weighted over the three scenarios · today's price ${usd(v.price)}${v.price_source ? " (" + esc(v.price_source) + ")" : ""}${er != null ? `<br>held to the end of ${esc(yrs[yrs.length - 1])}: <b>${pct(er, 1)}</b> a year` : ""}</div></div>
+        <div class="tiny muted">weighted over the three scenarios · today's price ${usd(v.price)}${v.price_source ? " (" + esc(v.price_source) + ")" : ""}</div></div>
       ${picker}
       <div class="h" style="margin-top:8px">Fair value today · after the ${v.margin_of_safety}% margin of safety</div>
       <div class="vals"><div><div class="k">BY MULTIPLE${M ? " · " + esc(M.short) : ""} ${spTip}</div><div class="v">${usd(fv)} <span class="tiny ${cls(up)}">${up == null ? "" : pct(up, 1)}</span></div>
