@@ -103,6 +103,7 @@ table.cmp .qtag{font-size:8.5px;font-weight:700;letter-spacing:.3px;color:#8A5A0
 .fr:nth-child(odd){background:var(--soft)}.fr .l{color:var(--muted)}.fr .v{font-weight:700;text-align:right}
 .fr.est{background:#EEEAFD;cursor:pointer}.fr.est:nth-child(odd){background:#F5F2FF}.fr.est .v{color:#6250d6;font-style:italic}
 .fr .good{color:var(--ok)}.fr .bad{color:var(--bad)}.fr .mx-tip{flex-basis:100%}.fr{flex-wrap:wrap}
+.nums.own td{text-align:left;vertical-align:top}.nums.own td:last-child{text-align:right}
 .ctabs button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .co{display:flex;gap:12px;align-items:center;cursor:pointer}
 .co .badge{width:48px;height:48px;font-size:20px;flex:none}
@@ -784,14 +785,14 @@ function quarters(c) {
 }
 
 // a company has its own tabs, like the PC: the grade, projections, the earnings call, and Compare
-const CTABS = [["fund", "Fundamentals"], ["proj", "Projections"], ["grade", "Earnings results"], ["call", "Earnings call"], ["cmp", "Compare"]];
+const CTABS = [["fund", "Fundamentals"], ["proj", "Projections"], ["grade", "Earnings results"], ["call", "Earnings call"], ["profile", "Company"], ["entry", "Entry & sizing"], ["cmp", "Compare"]];
 function cTab(t, k) {
   if (k == "cmp") { cmpWith(t); return; }
   history.replaceState(null, "", `#/c/${t}/${k}`);    // no extra step for the Back button
   route(); window.scrollTo(0, 0);
 }
 function company(t, sub) {
-  sub = ["fund", "grade", "proj", "call"].includes(sub) ? sub : "fund";
+  sub = ["fund", "grade", "proj", "call", "profile", "entry"].includes(sub) ? sub : "fund";
   const c = allCos().find(x => x.ticker == t);
   if (!c) return `<div class="empty">Not found.</div>`;
   if (selT != t) { selT = t; selQ = null; }
@@ -809,6 +810,9 @@ function company(t, sub) {
     <div class="ctabs">${CTABS.filter(([k]) => k != "cmp" || c.compare).map(([k, l]) => `<button class="${k == sub ? "on" : ""}" onclick="cTab('${c.ticker}','${k}')">${l}${k == "cmp" ? " →" : ""}</button>`).join("")}</div>`;
 
   if (sub == "fund") return html + fundCard(c) + `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
+  setTimeout(() => { const b = document.querySelector(".ctabs button.on"); if (b) b.scrollIntoView({inline: "center", block: "nearest"}); }, 0);
+  if (sub == "profile") return html + businessCard(c) + `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
+  if (sub == "entry") return html + entryCard(c) + `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
   if (sub == "call") return html + callCard(c) + `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
   if (sub == "proj") return html + (v ? valuationCard(c, v, q) : `<div class="empty">No projection for ${esc(c.ticker)} yet.<br>Open it on the PC (2 · Projections), then Sync.</div>`)
     + `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
@@ -824,18 +828,176 @@ function company(t, sub) {
       <div class="tile"><div class="k">RETURNED</div><div class="v">${money((u.buybacks || 0) + (u.dividends || 0))}</div><div class="s">buybacks ${money(u.buybacks || 0)} · dividends ${money(u.dividends || 0)}</div></div>
     </div>${q.cash_points ? pointers(q.cash_points, "Where the cash went") : `<p class="note">${esc(f.verdict)}</p>`}${riskBox(q.holder_risks)}</div>`;
 
+  html += `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
+  return html;
+}
+
+// ---------- 5 · company information and 6 · entry & sizing (the PC's tabs) ----------
+function businessCard(c) {
   const b = c.business;
-  if (b) {
-    const P = {health: "Financial health", margins: "Margins vs peers", share: "Market share", tam: "Market growth", moat: "Moat"};
-    html += `<div class="card"><div class="h">The business ${b.grade ? `· <span style="color:${gcol(b.grade)}">${b.grade}</span>` : ""}</div>
+  if (!b) return `<div class="empty">No company information for ${esc(c.ticker)} yet.<br>Fill it on the PC (5 · Company information), then Sync.</div>`;
+  const P = {health: "Financial health", margins: "Margins vs peers", share: "Market share", tam: "Market growth", moat: "Moat"};
+  const F = b.facts || {};
+  const facts = [["What it does", F.what], ["Founded", F.founded], ["CEO", F.ceo]].filter(([, v]) => v);
+  return `<div class="card"><div class="h">The business ${b.grade ? `· <span style="color:${gcol(b.grade)}">${b.grade}</span>` : ""}</div>
       ${b.hq ? `<p class="small muted">${esc(b.hq)}${b.industry ? " · " + esc(b.industry) : ""}</p>` : ""}
+      ${facts.map(([k, v]) => `<p class="small"><b>${k}:</b> ${esc(String(v))}</p>`).join("")}
       ${Object.entries(P).map(([k, l]) => { const p = b.pillars[k] || {}; return `<div class="blk" style="cursor:default"><div class="top">
         <span class="name" style="width:128px">${l.toUpperCase()}</span><span class="bar"><i style="width:${p.score ?? 0}%;background:${scol(p.score)}"></i></span>
         <span class="val">${p.score ?? "—"}</span></div><div class="tiny muted" style="margin-top:3px">${esc(p.note || "")}</div></div>`; }).join("")}
       ${b.grade ? "" : `<p class="note">${b.filled} of 5 pillars filled: the business grade appears when all five are in.</p>`}</div>`;
-  }
-  html += `<p class="note" style="text-align:center">Educational analysis, not investment advice.</p>`;
-  return html;
+}
+function ownCard(F) {
+  const o = F.own;
+  const big = v => v == null ? "—" : v >= 1e9 ? (v / 1e9).toFixed(1) + "B" : v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? (v / 1e3).toFixed(0) + "K" : String(Math.round(v));
+  const dd = d => { const x = new Date(d + "T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString("en-GB", {day: "2-digit", month: "short", year: "2-digit"}); };
+  const ins = o && o.insiders, inst = o && o.institutions;
+  let h = `<div class="card fg"><div class="gh">INSIDER TRADES · LAST 12 MONTHS</div>`;
+  if (!ins) h += `<p class="tiny muted">Not read yet: the PC reads the Form 4 filings at the SEC once a day.</p>`;
+  else if (!ins.trades.length) h += `<p class="tiny muted">No open-market buys or sales in the last 12 months (grants and option exercises are left out).</p>`;
+  else h += `<table class="nums own"><tr><th></th><th>Date</th><th>Who</th><th>Value</th></tr>${ins.trades.map(x => `<tr>
+      <td style="color:${x.kind == "buy" ? "var(--ok)" : x.plan ? "var(--muted)" : "var(--bad)"};font-weight:700">${x.kind == "buy" ? "Buy" : "Sale" + (x.plan ? " (planned)" : "")}</td>
+      <td>${esc(dd(x.date))}</td><td>${esc(String(x.who || "").toLowerCase().replace(/\b\w/g, m => m.toUpperCase()).slice(0, 22))}<div class="tiny muted">${esc(String(x.role || "").slice(0, 26))}</div></td>
+      <td>$${big(x.value)}<div class="tiny muted">${x.shares ? Math.round(x.shares).toLocaleString("en-US") + " sh" : ""}</div></td></tr>`).join("")}</table>`;
+  h += `</div><div class="card fg"><div class="gh">LARGEST INSTITUTIONAL HOLDERS${inst && (inst.new || inst.sold_out) ? ` · <span class="muted">${[inst.new ? inst.new.toLocaleString("en-US") + " new" : "", inst.sold_out ? inst.sold_out.toLocaleString("en-US") + " sold out" : ""].filter(Boolean).join(" · ")}</span>` : ""}</div>`;
+  if (!inst || !inst.top.length) h += `<p class="tiny muted">Not available yet (Nasdaq's summary of the 13F filings, fetched by the PC once a week).</p>`;
+  else h += `<table class="nums own"><tr><th>Holder</th><th>% of co.</th><th>Change</th></tr>${inst.top.map(x => `<tr>
+      <td>${esc(String(x.name || "").toLowerCase().replace(/\b\w/g, m => m.toUpperCase()).slice(0, 30))}<div class="tiny muted">${esc(x.date || "")}</div></td>
+      <td>${x.pct == null ? "—" : x.pct.toFixed(1) + "%"}</td>
+      <td style="color:${x.change_pct > 0 ? "var(--ok)" : x.change_pct < 0 ? "var(--bad)" : "inherit"}">${x.change_pct == null ? "—" : (x.change_pct > 0 ? "+" : "") + x.change_pct.toFixed(1) + "%"}</td></tr>`).join("")}</table>`;
+  return h + `</div>`;
+}
+
+let ENT = {}, ENTRAW = {}, ENTBUSY = {}, ENTMSG = {}, ENTSPAN = LS.get("tarsier.entry_span", "1Y");
+const ENT_COL = {buy_zone: "#1E7B34", extended: "#B7791F", accumulate: "#2B6CB0", downtrend: "#B3261E", wait: "#6B7785", starter: "#8A5A00"};
+function entTargets() { return LS.get("tarsier.entry_targets", {}); }
+function entContext(c) {
+  // the portfolio as the plan needs it: the PC's private holdings when unlocked, else the public weights
+  const p = D.portfolio || {}, t = c.ticker, out = {total: 100000, held: 0, fx: 1, cur: (PRIV && PRIV.currency) || p.currency || "€", known: false};
+  const pub = (p.holdings || []).find(h => h.t == t);
+  if (PRIV) {
+    const mv = moValues(p), base = CUR_CODE[out.cur] || "EUR";
+    out.total = Object.values(mv.val).reduce((a, b) => a + b, 0) || 100000;
+    out.held = mv.val[t] || 0; out.known = true;
+    const h = HI[t], rate = h && h.currency ? moRate(h.currency, base) : (base == "USD" ? 1 : moRate("USD", base));
+    if (rate) out.fx = rate;
+  } else if (pub && pub.w > 0) out.held = pub.w / 100 * out.total;
+  const caps = (p.rules && p.rules.caps) || {};
+  const tg = entTargets()[t];
+  out.target = tg != null ? tg : (pub && caps[pub.conviction]) || caps[(p.rules || {}).default] || 0.10;
+  out.conviction = pub && pub.conviction;
+  return out;
+}
+async function entGo(t, refetch) {
+  const c = allCos().find(x => x.ticker == t); if (!c || ENTBUSY[t]) return;
+  ENTBUSY[t] = true; ENTMSG[t] = "Reading 10 years of prices…"; route();
+  try {
+    if (refetch || !ENTRAW[t]) {
+      const get = async s => { const r = await fetch(`${RELAY}/hist/${encodeURIComponent(s)}`); if (!r.ok) throw new Error(r.status == 404 ? "the relay has no /hist route yet: paste the new worker.js into Cloudflare" : "Yahoo did not answer (" + r.status + ")"); return await r.text(); };
+      ENTRAW[t] = {chart: await get(t), spy: ENTRAW.SPY || (ENTRAW.SPY = await get("SPY"))};
+    }
+    const v = PRES[t] || c.valuation || {}, x = entContext(c);
+    const py = await engine(m => { ENTMSG[t] = m; route(); });
+    py.globals.set("E_", JSON.stringify({ticker: t, chart: ENTRAW[t].chart, spy: ENTRAW[t].spy, earnings: c.earnings_dates || [],
+      fv: v.fair_value || null, held: x.held, target: x.target, total: x.total, fx: x.fx, span: 504}));
+    const r = JSON.parse(py.runPython("phone_engine.entry(E_)"));
+    if (r.error) throw new Error(r.error);
+    r.ctx = x; ENT[t] = r; ENTMSG[t] = "";
+  } catch (e) { ENTMSG[t] = "Could not read the prices: " + (e.message || e); }
+  finally { ENTBUSY[t] = false; route(); }
+}
+function entTarget(t, v) {
+  const x = parseFloat(String(v).replace(",", ".")); const all = entTargets();
+  if (x > 0 && x <= 100) all[t] = x / 100; else delete all[t];
+  LS.set("tarsier.entry_targets", all); delete ENT[t]; entGo(t);
+}
+function entSpan(s) { ENTSPAN = s; LS.set("tarsier.entry_span", s); route(); }
+function entChart(t, r) {
+  const C = r.chart, n = {"2Y": 504, "1Y": 252, "6M": 126, "3M": 63}[ENTSPAN] || 252, i0 = Math.max(0, C.c.length - n);
+  const W = 400, PH = 190, VH = 32, RH = 50, T = 8, L = 2, PW = 282, AX = PW + 4, LX = AX + 34;
+  const xs = []; for (let i = i0; i < C.c.length; i++) xs.push(i);
+  let lo = Math.min(...xs.map(i => C.l[i] ?? C.c[i])), hi = Math.max(...xs.map(i => C.h[i] ?? C.c[i]));
+  const lv = (r.levels || []).filter(l => l.price >= lo * 0.85); lv.forEach(l => lo = Math.min(lo, l.price));
+  const fv = r.fv, fvIn = fv && fv >= lo * 0.9 && fv <= hi * 1.25; if (fvIn) { lo = Math.min(lo, fv); hi = Math.max(hi, fv); }
+  const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+  const X = i => L + (i - i0) / Math.max(1, C.c.length - 1 - i0) * PW, Y = p => T + (hi - p) / (hi - lo) * PH;
+  const vb = T + PH + 8 + VH, rt = vb + 10, rb = rt + RH, RY = v => rb - v / 100 * RH, H = rb + 16;
+  let s = "";
+  for (let k = 0; k < 5; k++) { const p = lo + (hi - lo) * k / 4; s += `<line x1="${L}" x2="${L + PW}" y1="${Y(p).toFixed(1)}" y2="${Y(p).toFixed(1)}" stroke="#EEF1F5"/><text x="${AX}" y="${(Y(p) + 3).toFixed(1)}" class="ax">${p >= 100 ? p.toFixed(0) : p.toFixed(1)}</text>`; }
+  const labs = [];
+  lv.forEach(l => { const y = Y(l.price); s += `<line x1="${L}" x2="${L + PW}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${l.buy ? "#1E7B34" : "#8FCB9B"}" stroke-width="${l.buy ? 1.6 : 0.8}"/>`;
+    labs.push([y, l.buy ? `BUY ${l.buy} · $${l.price.toFixed(2)}` : `$${l.price.toFixed(2)}`, l.buy ? 700 : 400, l.buy ? "#1E7B34" : "#5FA463"]); });
+  if (fv) { if (fvIn) { const y = Y(fv); s += `<line x1="${L}" x2="${L + PW}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#1E7B34" stroke-dasharray="5 3" stroke-width="1.4"/>`; labs.push([y, `FV $${fv.toFixed(2)}`, 700, "#1E7B34"]); }
+    else labs.push([T + 4, `FV $${fv.toFixed(0)} ${fv > hi ? "↑" : "↓"}`, 700, fv > C.c[C.c.length - 1] ? "#1E7B34" : "#B3261E"]); }
+  labs.sort((a, b) => a[0] - b[0]); for (let j = 1; j < labs.length; j++) labs[j][0] = Math.max(labs[j][0], labs[j - 1][0] + 11);
+  const ys = labs.map(l => l[0]);
+  labs.forEach(([y, txt, w, col], j) => { s += `<text x="${LX}" y="${(y + 3).toFixed(1)}" class="lb" fill="${col}" font-weight="${w}">${txt}</text>`; });
+  const line = (arr, col, w, dash) => { const p = xs.filter(i => arr[i] != null).map(i => `${X(i).toFixed(1)},${Y(arr[i]).toFixed(1)}`); return p.length > 1 ? `<polyline points="${p.join(" ")}" fill="none" stroke="${col}" stroke-width="${w}"${dash ? ` stroke-dasharray="${dash}"` : ""}/>` : ""; };
+  s += line(C.e200, "#7C3AED", 1.2) + line(C.e50, "#D97706", 1.2, "4 3") + line(C.c, "#1B2A41", 1.6);
+  const vmax = Math.max(...xs.map(i => C.v[i] || 0)) || 1, bw = Math.max(0.6, PW / xs.length * 0.7);
+  xs.forEach(i => { const h = (C.v[i] || 0) / vmax * VH, up = i == 0 || C.c[i] >= C.c[i - 1]; s += `<rect x="${(X(i) - bw / 2).toFixed(1)}" y="${(vb - h).toFixed(1)}" width="${bw.toFixed(2)}" height="${h.toFixed(1)}" fill="${up ? "#B7DFC0" : "#F2B8B5"}"/>`; });
+  s += `<rect x="${L}" y="${RY(70)}" width="${PW}" height="${RY(30) - RY(70)}" fill="#F6F8FB"/>`;
+  [[70, "#B3261E"], [30, "#1E7B34"]].forEach(([v, col]) => s += `<line x1="${L}" x2="${L + PW}" y1="${RY(v)}" y2="${RY(v)}" stroke="${col}" stroke-dasharray="3 3"/><text x="${AX}" y="${RY(v) + 3}" class="ax" fill="${col}">${v}</text>`);
+  s += line(C.rsi.map(v => v), "#475569", 1).replace(/points="([^"]+)"/, (m, pts) => `points="${xs.filter(i => C.rsi[i] != null).map(i => `${X(i).toFixed(1)},${RY(C.rsi[i]).toFixed(1)}`).join(" ")}"`);
+  let lastM = null;
+  xs.forEach(i => { const m = C.d[i].slice(0, 7); if (m != lastM && C.d[i].slice(8) <= "07") { if (X(i) > 18 && (n <= 130 || +m.slice(5) % (n > 300 ? 3 : 2) == 1)) s += `<text x="${X(i).toFixed(1)}" y="${H - 3}" class="ax" text-anchor="middle">${new Date(C.d[i] + "T12:00:00").toLocaleDateString("en-GB", {month: "short"})}${m.slice(5) == "01" ? " " + m.slice(2, 4) : ""}</text>`; lastM = m; } });
+  ENTGEO = {t, i0, n: C.c.length, PW, L, X, Y, RY, vb, VH, top: T, bot: rb};
+  return `<div class="ent-chart"><svg id="entsvg" viewBox="0 0 ${W} ${H}" width="100%" style="touch-action:pan-y" onpointermove="entHover(evt)" onpointerdown="entHover(evt)" onpointerleave="entHover(null)">
+    <style>.ax{font:8px system-ui;fill:#6B7785}.lb{font:8px system-ui}</style>${s}<g id="enthov"></g></svg>
+    <div id="entinfo" class="tiny" style="min-height:16px;text-align:center;font-weight:700">Touch the chart: date, price, volume and RSI</div></div>`;
+}
+let ENTGEO = null;
+function entHover(e) {
+  const g = document.getElementById("enthov"), info = document.getElementById("entinfo"), G = ENTGEO;
+  if (!g || !G) return;
+  if (!e) { g.innerHTML = ""; return; }
+  const svg = document.getElementById("entsvg"), box = svg.getBoundingClientRect(), x = (e.clientX - box.left) / box.width * 400;
+  if (x < G.L || x > G.L + G.PW) return;
+  const r = ENT[G.t], C = r.chart, i = Math.min(C.c.length - 1, Math.max(G.i0, G.i0 + Math.round((x - G.L) / G.PW * (C.c.length - 1 - G.i0))));
+  const X = G.X(i), vol = C.v[i] || 0, a = C.v.slice(Math.max(0, i - 49), i + 1).filter(Boolean), avg = a.reduce((p, q) => p + q, 0) / (a.length || 1);
+  const vt = vol >= 1e9 ? (vol / 1e9).toFixed(2) + "B" : vol >= 1e6 ? (vol / 1e6).toFixed(1) + "M" : (vol / 1e3).toFixed(0) + "K";
+  g.innerHTML = `<line x1="${X}" x2="${X}" y1="${G.top}" y2="${G.bot}" stroke="#9AA5B1" stroke-width="0.6"/><circle cx="${X}" cy="${G.Y(C.c[i])}" r="3" fill="none" stroke="#1B2A41" stroke-width="1.4"/>`;
+  info.textContent = `${C.d[i]} · $${C.c[i].toFixed(2)} · vol ${vt} (${(vol / avg).toFixed(1)}× 50-day avg)${C.rsi[i] != null ? " · RSI " + C.rsi[i].toFixed(0) : ""}`;
+}
+function entryCard(c) {
+  const t = c.ticker, r = ENT[t] && ENT[t].ticker == t ? ENT[t] : null;
+  const v = PRES[t] || c.valuation || {};
+  if (r && r.fv != (v.fair_value || null) && !ENTBUSY[t]) setTimeout(() => entGo(t), 0);     // the projection moved the fair value
+  if (!r && !ENTBUSY[t] && !ENTMSG[t]) setTimeout(() => entGo(t), 0);
+  const help = tipPts("en-" + t, ["The fundamentals decide IF you buy (below the fair value); this tab helps with WHEN and HOW MUCH",
+    "Below the fair value: Buy zone (uptrend, not stretched) · Extended · Accumulate (no clear trend) · Downtrend",
+    "Above it: Wait (you hold it: do not add) or Starter only (you hold none: one half-size batch at most); the rest only at support levels under the fair value",
+    "Prices: Yahoo Finance, 10 years daily, through the relay. The same rules as the PC (6 · Entry & sizing)"]);
+  const head = `<div class="card"><div class="h">Entry & sizing ${help}</div>`;
+  if (!r) return head + `<p class="note">${esc(ENTMSG[t] || "Reading the prices…")}</p>${ENTMSG[t] && !ENTBUSY[t] ? `<button class="pbtn" onclick="entGo('${t}', true)">Try again</button>` : ""}</div>`;
+  const d = r.discount, x = r.ctx, cur = x.cur;
+  let h = head + `<div style="text-align:center"><div style="display:inline-block;background:${ENT_COL[r.state] || "#6B7785"};color:#fff;font-weight:800;font-size:20px;padding:6px 16px;border-radius:6px">${esc(r.label)}</div>
+      <div class="small" style="font-weight:700;margin-top:6px">${esc(r.meaning)}</div>
+      ${r.fv ? `<div style="margin-top:8px"><span style="background:${d >= 0 ? "#1E7B34" : "#B3261E"};color:#fff;font-weight:800;padding:3px 10px;border-radius:4px">${(-d * 100 >= 0 ? "+" : "") + (-d * 100).toFixed(0)}% vs fair value</span></div>
+        <div class="tiny muted" style="margin-top:4px">price ${usd(r.price)} (${esc(r.date)}) · fair value ${usd(r.fv)} · ${d >= 0 ? "below it: worth buying" : "above it: no buying (a first small batch at most)"}</div>`
+        : `<div class="tiny muted" style="margin-top:6px">No fair value yet: open Projections</div>`}
+      <button class="pbtn" ${ENTBUSY[t] ? "disabled" : ""} onclick="entGo('${t}', true)">${ENTBUSY[t] ? "Working…" : "↻ Update"}</button></div></div>`;
+  h += `<div class="card"><div class="h">Price and support levels</div>
+    <div class="tiny" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px"><span>— price</span><span style="color:#7C3AED">— EMA 200</span><span style="color:#D97706">- - EMA 50</span><span style="color:#1E7B34">- - fair value</span><span style="color:#1E7B34;font-weight:700">BUY n: the plan's levels</span></div>
+    <div class="ctabs" style="position:static;padding:0 0 4px">${["3M", "6M", "1Y", "2Y"].map(s => `<button class="${s == ENTSPAN ? "on" : ""}" onclick="entSpan('${s}')">${s}</button>`).join("")}</div>
+    ${entChart(t, r)}<p class="tiny muted">RSI 14 days in the lower strip: 70+ stretched, 30- oversold.</p></div>`;
+  const tone = {good: "var(--ok)", bad: "var(--bad)", warn: "#B7791F"};
+  h += `<div class="card fg"><div class="gh">THE TECHNICAL READING</div>${r.short ? `<p class="small">${r.reasons.map(esc).join("<br>")}</p>` :
+    r.reading.map(([k, val, note, tn]) => val == null ? `<div class="gh" style="margin-top:8px;font-size:10px">${esc(k)}</div>` :
+      `<div class="fr" style="display:block"><div style="display:flex;justify-content:space-between"><span class="l"><b>${esc(k)}</b></span><span class="v" style="color:${tone[tn] || "inherit"};font-weight:800">${esc(val)}</span></div><div class="tiny muted">${esc(note)}</div></div>`).join("")}</div>`;
+  h += `<div class="card fg"><div class="gh">SUPPORT LEVELS BELOW THE PRICE</div>${(r.levels || []).length ? r.levels.map(l => `<div class="fr"><span class="l">${l.buy ? `<b style="background:#1E7B34;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px">BUY ${l.buy}</b> ` : ""}<b>${usd(l.price)}</b> <span class="tiny muted">${((l.price / r.price - 1) * 100).toFixed(1)}%</span><div class="tiny muted">${esc(l.what)}</div></span></div>`).join("") : `<p class="tiny muted">None found below the price.</p>`}</div>`;
+  const n0 = z => Math.round(z).toLocaleString("en-US"), caps = ((D.portfolio || {}).rules || {}).caps || {};
+  h += `<div class="card"><div class="h">The buying plan</div>
+    <p class="tiny muted">${x.known ? `Portfolio ${cur}${n0(x.total)} · you hold ${cur}${n0(x.held)} (${(x.held / x.total * 100).toFixed(1)}%)` : `Amounts for a portfolio of ${cur}100,000 (unlock your holdings in Portfolio to size against yours)${x.held ? " · you hold it" : ""}`}</p>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0">Target weight
+      ${Object.entries(caps).map(([k, w]) => `<button class="pbtn" style="margin:0;${Math.abs(x.target - w) < 1e-6 ? "background:var(--navy);color:#fff" : ""}" onclick="entTarget('${t}', ${w * 100})">${Math.round(w * 100)}%</button>`).join("")}
+      <input class="msel" style="width:64px" inputmode="decimal" placeholder="%" value="${(x.target * 100).toFixed(0)}" onchange="entTarget('${t}', this.value)"></div>
+    ${r.plan.pace ? `<p class="tiny" style="color:${d != null && d < 0 ? "var(--bad)" : "inherit"}">${esc(r.plan.pace)}</p>` : ""}
+    ${r.plan.note ? `<p class="note">${esc(r.plan.note)}</p>` : ""}
+    ${r.plan.steps.length ? `<table class="nums"><tr><th>#</th><th>When</th><th>Amount</th><th>Shares</th></tr>${r.plan.steps.map(s => `<tr${s.step == 1 ? ' style="font-weight:700"' : ""}>
+      <td>${s.step}</td><td style="text-align:left">${esc(s.when)}<div class="tiny muted">${esc(s.why)}</div></td><td>${cur}${n0(s.amount)}</td><td>${s.why.startsWith("time") ? "~" : ""}${n0(s.shares)}</td></tr>`).join("")}</table>` : `<p class="small muted">Nothing to buy.</p>`}
+    <p class="tiny muted">Whole shares, rounded down. A guide, not a forecast: the method check is on the PC (Settings).</p></div>`;
+  return h;
 }
 
 function anchorLine(v, alt) {
@@ -890,12 +1052,14 @@ function fundCard(c) {
     html += `<div class="card fg"><div class="gh">${esc(name.toUpperCase())}</div>${rows.map(([k, l, v, tone, est, tips]) =>
       `<div class="fr${est ? " est" : ""}"${est ? ` onclick="cTab('${t}','proj')"` : ""}><span class="l">${esc(l)} ${tipI("f-" + t + k, bul(tips))}</span><span class="v ${tone || ""}">${esc(v)}</span></div>`).join("")}</div>`;
   }
+  html += ownCard(F);
   html += `<div class="card"><ul class="tiny muted" style="margin:0;padding-left:16px">
     <li>Statements: SEC filings, last 12 months unless said</li>
     <li>Price, volume and dividends: Yahoo Finance, when the PC last published</li>
     <li>Estimates (violet): Tarsier's projection, base case, or the guidance and analyst consensus (Projections)</li>
     <li>Peers: the Peer Groups workbook; green / red = better / worse than their median</li>
-    <li>Not shown, no free source: insider and institutional ownership, short interest, float, index, options</li></ul></div>`;
+    <li>Ownership: insiders' Form 4 filings (SEC) and Nasdaq's summary of the 13F filings, read by the PC</li>
+    <li>Not shown, no free source: short interest, float, index, options</li></ul></div>`;
   return html;
 }
 
@@ -1596,7 +1760,9 @@ async function ecRead(t, q) {
   const call = ecGet(t, q), prev = ecGet(t, ecPrev(q));
   const py = await engine(m => { ECMSG[t] = m; route(); });
   py.globals.set("C_", JSON.stringify(call)); py.globals.set("P_", prev && prev.turns.length ? JSON.stringify(prev) : null);
-  EC[t] = JSON.parse(py.runPython("phone_engine.call_reading(C_, P_)"));
+  const co = allCos().find(x => x.ticker == t) || {};
+  py.globals.set("X_", JSON.stringify({history: (co.history || []).map(h => ({label: h.label, end: h.end})), earnings: co.earnings_dates || []}));
+  EC[t] = JSON.parse(py.runPython("phone_engine.call_reading(C_, P_, X_)"));
 }
 async function ecGo(t) {
   const key = LS.get("tarsier.av", "");
@@ -1638,7 +1804,8 @@ function ecView(v) { ECVIEW = v; route(); }
 function callCard(c) {
   const t = c.ticker, r = EC[t] && EC[t].ticker == t ? EC[t] : null, have = ecQuarters(t);
   if (!r && have.length && !ECBUSY[t] && !ECMSG[t]) setTimeout(() => ecShow(t, have[0]), 0);
-  const head = `<div class="h">Earnings call${r ? " · " + ecQL(r.quarter) : ""} ${tipPts("ec-" + t, ["Read with fixed rules, no AI (the PC's)", "Tone: finance word lists (Loughran-McDonald), −1 to +1",
+  const cd = r && r.date ? new Date(r.date + "T12:00:00").toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"}) : "";
+  const head = `<div class="h">Earnings call${r ? " · " + ecQL(r.quarter) : ""}${cd ? ` · <span class="muted" title="${esc(r.date_how || "")}">${cd}</span>` : ""} ${tipPts("ec-" + t, ["Read with fixed rules, no AI (the PC's)", "Tone: finance word lists (Loughran-McDonald), −1 to +1",
       "Guidance: forward-looking sentences with a number", "Vague answer: a dodging phrase, or a long hedged answer without a number", "The transcript stays on this phone"])}</div>`;
   const btn = `<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="pbtn" style="margin:0" ${ECBUSY[t] ? "disabled" : ""} onclick="ecGo('${t}')">${ECBUSY[t] ? "Working…" : "↻ Get the latest call"}</button>
       ${have.length > 1 ? `<select class="msel" onchange="this.value && ecShow('${t}', this.value)"><option value="">Saved calls</option>${have.map(q => `<option value="${q}">${ecQL(q)}</option>`).join("")}</select>` : ""}</div>`;
