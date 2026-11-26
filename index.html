@@ -923,6 +923,8 @@ function entChart(t, r) {
   const X = i => L + (i - i0) / Math.max(1, C.c.length - 1 - i0) * PW, Y = p => T + (hi - p) / (hi - lo) * PH;
   const vb = T + PH + 8 + VH, rt = vb + 10, rb = rt + RH, RY = v => rb - v / 100 * RH, H = rb + 16;
   let s = "";
+  ((C.zones || {})[ENTSPAN] || []).forEach(z => { const y0 = Y(Math.min(z.hi, hi)), y1 = Y(Math.max(z.lo, lo));
+    s += `<rect x="${L}" y="${y0.toFixed(1)}" width="${PW}" height="${Math.max(0, y1 - y0).toFixed(1)}" fill="${z.top ? "#D7EFDC" : "#E8F5EB"}"/>`; });
   for (let k = 0; k < 5; k++) { const p = lo + (hi - lo) * k / 4; s += `<line x1="${L}" x2="${L + PW}" y1="${Y(p).toFixed(1)}" y2="${Y(p).toFixed(1)}" stroke="#EEF1F5"/><text x="${AX}" y="${(Y(p) + 3).toFixed(1)}" class="ax">${p >= 100 ? p.toFixed(0) : p.toFixed(1)}</text>`; }
   const labs = [];
   lv.forEach(l => { const y = Y(l.price); s += `<line x1="${L}" x2="${L + PW}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${l.buy ? "#1E7B34" : "#8FCB9B"}" stroke-width="${l.buy ? 1.6 : 0.8}"/>`;
@@ -967,6 +969,7 @@ function entryCard(c) {
   const help = tipPts("en-" + t, ["The fundamentals decide IF you buy (below the fair value); this tab helps with WHEN and HOW MUCH",
     "Below the fair value: Buy zone (uptrend, not stretched) · Extended · Accumulate (no clear trend) · Downtrend",
     "Above it: Wait (you hold it: do not add) or Starter only (you hold none: one half-size batch at most); the rest only at support levels under the fair value",
+    "Light green boxes: high-volume zones of the period shown (where most shares changed hands): they tend to hold as support or resistance; the darkest is the busiest",
     "Prices: Yahoo Finance, 10 years daily, through the relay. The same rules as the PC (6 · Entry & sizing)"]);
   const head = `<div class="card"><div class="h">Entry & sizing ${help}</div>`;
   if (!r) return head + `<p class="note">${esc(ENTMSG[t] || "Reading the prices…")}</p>${ENTMSG[t] && !ENTBUSY[t] ? `<button class="pbtn" onclick="entGo('${t}', true)">Try again</button>` : ""}</div>`;
@@ -978,7 +981,7 @@ function entryCard(c) {
         : `<div class="tiny muted" style="margin-top:6px">No fair value yet: open Projections</div>`}
       <button class="pbtn" ${ENTBUSY[t] ? "disabled" : ""} onclick="entGo('${t}', true)">${ENTBUSY[t] ? "Working…" : "↻ Update"}</button></div></div>`;
   h += `<div class="card"><div class="h">Price and support levels</div>
-    <div class="tiny" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px"><span>— price</span><span style="color:#7C3AED">— EMA 200</span><span style="color:#D97706">- - EMA 50</span><span style="color:#1E7B34">- - fair value</span><span style="color:#1E7B34;font-weight:700">BUY n: the plan's levels</span></div>
+    <div class="tiny" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px"><span>— price</span><span style="color:#7C3AED">— EMA 200</span><span style="color:#D97706">- - EMA 50</span><span style="color:#1E7B34">- - fair value</span><span style="color:#1E7B34;font-weight:700">BUY n: the plan's levels</span><span style="color:#7FBF8E">▬ high-volume zones</span></div>
     <div class="ctabs" style="position:static;padding:0 0 4px">${["3M", "6M", "1Y", "2Y"].map(s => `<button class="${s == ENTSPAN ? "on" : ""}" onclick="entSpan('${s}')">${s}</button>`).join("")}</div>
     ${entChart(t, r)}<p class="tiny muted">RSI 14 days in the lower strip: 70+ stretched, 30- oversold.</p></div>`;
   const tone = {good: "var(--ok)", bad: "var(--bad)", warn: "#B7791F"};
